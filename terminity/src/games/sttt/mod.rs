@@ -10,7 +10,9 @@ use crossterm::terminal::Clear;
 use crossterm::{QueueableCommand, cursor};
 use crossterm::style::{Stylize, Color, ContentStyle, PrintStyledContent as PrintSt, StyledContent};
 use crossterm::event::{self, KeyModifiers};
-use Cell::*;
+use Tile::*;
+use terminity_widgets::widgets::frame::Frame;
+use terminity_widgets::{frame, Widget};
 
 macro_rules! nl {
 	() => {
@@ -31,7 +33,8 @@ type Player = u8;
 
 struct Table<'a> {
 	pub out: &'a mut dyn io::Write,
-	pub values: [Zone; 9],
+	//pub values: [Zone; 9],
+	pub frame: Frame<usize, Zone, [Zone; 9]>,
 	pub selected: Selection,
 	pub player: u8,
 	pub text: String
@@ -52,20 +55,42 @@ enum SelectType {
 
 #[derive(Debug)]
 struct Zone {
-	pub values: [Cell; 9],
-	pub winner: Option<Cell>
+	pub values: [Tile; 9],
+	pub winner: Option<Tile>,
+}
+
+impl Widget for Zone {
+    fn displ_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
+		let mut style = ContentStyle::new();
+        if let Some(winner) = self.winner {
+			style.background_color = Some(winner.get_color());
+			style.foreground_color = Some(Color::Black);
+		}
+		for cell_x in 0..3 {
+			f.write_fmt(format_args!("{}", &style.apply(' ').to_string()))?;
+			let cell = self[(cell_x, line as u8)];
+			let mut styled_cell = style.apply(cell).bold();
+			if style.foreground_color == None {
+				styled_cell = styled_cell.with(cell.get_color()).bold();
+			}
+			f.write_fmt(format_args!("{}", styled_cell))?;
+		}
+		f.write_fmt(format_args!("{}", &style.apply(' ').to_string()))?;
+		Ok(())
+    }
+    fn size(&self) -> &(u16, u16) { &(7, 3) }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(u8)]
-enum Cell {
+enum Tile {
 	X = 'x' as u8,
 	O = 'o' as u8,
 	Empty = ' ' as u8
 }
 
 
-impl Cell {
+impl Tile {
     fn from_player(player: Player) -> Self {
 		if player == 0 { X }
 		else if player == 1 { O }
@@ -86,7 +111,7 @@ impl Cell {
     }
 }
 
-impl Display for Cell {
+impl Display for Tile {
 	fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), fmt::Error> {
 		fmt.write_char(*self as u8 as char)
 	}
@@ -94,7 +119,7 @@ impl Display for Cell {
 
 impl Default for Zone {
 	fn default() -> Self {
-		Zone {
+		Self {
 			values: [Empty; 9],
 			winner: None
 		}
@@ -104,17 +129,17 @@ impl Default for Zone {
 impl Index<(u8, u8)> for Table<'_> {
 	type Output = Zone;
 	fn index(&self, (x, y): (u8, u8)) -> &Self::Output {
-		&self.values[(x + 3*y) as usize]
+		&self.frame[(x + 3*y) as usize]
 	}
 }
 impl IndexMut<(u8, u8)> for Table<'_> {
 	fn index_mut(&mut self, (x, y): (u8, u8)) -> &mut Self::Output {
-		&mut self.values[(x + 3*y) as usize]
+		&mut self.frame[(x + 3*y) as usize]
 	}
 }
 
 impl Index<(u8, u8)> for Zone {
-	type Output = Cell;
+	type Output = Tile;
 	fn index(&self, (x, y): (u8, u8)) -> &Self::Output {
 		&self.values[(x + 3*y) as usize]
 	}
@@ -127,11 +152,31 @@ impl IndexMut<(u8, u8)> for Zone {
 
 impl<'a> Table<'a> {
 	fn new(out: &'a mut dyn io::Write) -> Self {
+		let values: [Zone; 9] = Default::default();
 		Self {
 			out,
-			values: Default::default(),
 			selected: Selection { ty:SelectType::Zone, x:1, y:1 },
 			player: 0,
+			frame: frame!(
+				values => {
+					'0': [0], '1': [1], '2': [2],
+					'3': [3], '4': [4], '5': [5],
+					'6': [6], '7': [7], '8': [8]
+				},
+				"#-------#-------#-------#"
+				"|0000000|1111111|2222222|"
+				"|0000000|1111111|2222222|"
+				"|0000000|1111111|2222222|"
+				"#-------#-------#-------#"
+				"|3333333|4444444|5555555|"
+				"|3333333|4444444|5555555|"
+				"|3333333|4444444|5555555|"
+				"#-------#-------#-------#"
+				"|6666666|7777777|8888888|"
+				"|6666666|7777777|8888888|"
+				"|6666666|7777777|8888888|"
+				"#-------#-------#-------#"
+				),
 			text: "Welcome to Super tic tac toe!".to_owned() + &nl!()
 					+ "Choose in which zone you will play first. You won't be able to cancel!"
 		}
@@ -217,7 +262,7 @@ impl<'a> Table<'a> {
 	}
 
 	fn play(&mut self, z_x: u8, z_y: u8, cx: u8, cy: u8) -> Result<Option<Player>, bool> {
-		let cell_type = Cell::from_player(self.player);
+		let cell_type = Tile::from_player(self.player);
 
 		let cell = &mut self[(z_x, z_y)][(cx, cy)];
 		if *cell != Empty {
@@ -264,7 +309,7 @@ impl<'a> Table<'a> {
 			self[(z_x, z_y)].winner = Some(Empty);
 		}
 
-		if self[(z_x, z_y)].winner != None && self.values.iter().all(|z| z.winner != None) {
+		if self[(z_x, z_y)].winner != None && self.frame.iter().all(|z| z.winner != None) {
 			Ok(None)
 		} else {
 			Err(true)
@@ -312,7 +357,7 @@ impl<'a> Table<'a> {
 			.queue(PrintSt((format!(
 				"Turn to player {} ({})",
 				self.player + 1,
-				Cell::from_player(self.player).to_string().with(Cell::from_player(self.player).get_color()).bold()
+				Tile::from_player(self.player).to_string().with(Tile::from_player(self.player).get_color()).bold()
 			) + &nl!()).stylize()))?
 			.queue(cursor::MoveTo(0, 15))?
 			.queue(PrintSt(self.text.clone().stylize()))?
