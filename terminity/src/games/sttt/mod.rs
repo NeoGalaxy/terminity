@@ -1,27 +1,36 @@
 use std::ops::{Index, IndexMut};
-use std::io::Write as IOWrite;
-//use std::fmt::Write as FmtWrite;
+use std::fmt::Write as FmtWrite;
 use std::{
 	io,
 	fmt::{self, Display, Formatter}
 };
 
-use super::CLGame;
+use super::Game;
+use crossterm::terminal::Clear;
+use crossterm::{QueueableCommand, cursor};
+use crossterm::style::{Stylize, Color, ContentStyle, PrintStyledContent as PrintSt, StyledContent};
+use crossterm::event::{self, KeyModifiers};
+use Cell::*;
+
+macro_rules! nl {
+	() => {
+		format!("{}\n\r", Clear(crossterm::terminal::ClearType::UntilNewLine))
+	}
+}
 
 #[derive(Debug)]
 pub struct SuperTTT ();
 
-impl CLGame for SuperTTT {
-	fn run(term: console::Term) -> io::Result<()> {
-		Table::new(term).run()
+impl Game for SuperTTT {
+	fn run(&self, out: &mut dyn io::Write) -> io::Result<()> {
+		Table::new(out).run()
 	}
 }
 
 type Player = u8;
 
-#[derive(Debug)]
-struct Table {
-	pub term: console::Term,
+struct Table<'a> {
+	pub out: &'a mut dyn io::Write,
 	pub values: [Zone; 9],
 	pub selected: Selection,
 	pub player: u8,
@@ -55,8 +64,6 @@ enum Cell {
 	Empty = ' ' as u8
 }
 
-use Cell::*;
-use console::{Attribute, Key};
 
 impl Cell {
     fn from_player(player: Player) -> Self {
@@ -64,16 +71,16 @@ impl Cell {
 		else if player == 1 { O }
 		else { panic!("Whut?") }
     }
-    fn get_color(&self) -> console::Color {
+    fn get_color(&self) -> Color {
     	match self {
     	    X => {
-    	    	console::Color::Red
+    	    	Color::Red
     	    },
     	    O => {
-    	    	console::Color::Blue
+    	    	Color::Blue
     	    },
     	    Empty => {
-    	    	console::Color::White
+    	    	Color::White
     	    }
     	}
     }
@@ -81,11 +88,7 @@ impl Cell {
 
 impl Display for Cell {
 	fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-		use console::*;
-		write!(fmt, "{}", 
-			Style::new().fg(self.get_color()).attr(Attribute::Bold)
-			.apply_to(*self as u8 as char)
-		)
+		fmt.write_char(*self as u8 as char)
 	}
 }
 
@@ -98,13 +101,13 @@ impl Default for Zone {
 	}
 }
 
-impl Index<(u8, u8)> for Table {
+impl Index<(u8, u8)> for Table<'_> {
 	type Output = Zone;
 	fn index(&self, (x, y): (u8, u8)) -> &Self::Output {
 		&self.values[(x + 3*y) as usize]
 	}
 }
-impl IndexMut<(u8, u8)> for Table {
+impl IndexMut<(u8, u8)> for Table<'_> {
 	fn index_mut(&mut self, (x, y): (u8, u8)) -> &mut Self::Output {
 		&mut self.values[(x + 3*y) as usize]
 	}
@@ -122,57 +125,63 @@ impl IndexMut<(u8, u8)> for Zone {
 	}
 }
 
-impl Table {
-	fn new(term: console::Term) -> Self {
+impl<'a> Table<'a> {
+	fn new(out: &'a mut dyn io::Write) -> Self {
 		Self {
-			term,
+			out,
 			values: Default::default(),
 			selected: Selection { ty:SelectType::Zone, x:1, y:1 },
 			player: 0,
-			text: "Welcome to Super tic tac toe!\n".to_owned()
+			text: "Welcome to Super tic tac toe!".to_owned() + &nl!()
 					+ "Choose in which zone you will play first. You won't be able to cancel!"
 		}
 	}
 
-	fn run(&mut self) -> io::Result<()> {
+	fn run(&mut self) -> crossterm::Result<()> {
+		use event::{Event::Key, KeyEvent, KeyCode::*, KeyEventKind::*};
 		self.disp()?;
 		let _winner = loop {
-			match self.term.read_key()? {
-				Key::ArrowLeft => if self.selected.x > 0 {self.selected.x -= 1},
-				Key::ArrowRight => if self.selected.x < 2 {self.selected.x += 1},
-				Key::ArrowUp => if self.selected.y > 0 {self.selected.y -= 1},
-				Key::ArrowDown => if self.selected.y < 2 {self.selected.y += 1},
-				Key::Enter => match self.selected.ty {
+			match event::read()? {
+				Key(KeyEvent { code: Left, kind: Press, .. }) =>
+					if self.selected.x > 0 {self.selected.x -= 1},
+				Key(KeyEvent { code: Right, kind: Press, .. }) =>
+					if self.selected.x < 2 {self.selected.x += 1},
+				Key(KeyEvent { code: Up, kind: Press, .. }) =>
+					if self.selected.y > 0 {self.selected.y -= 1},
+				Key(KeyEvent { code: Down, kind: Press, .. }) =>
+					if self.selected.y < 2 {self.selected.y += 1},
+				Key(KeyEvent { code: Enter, kind: Press, .. }) =>
+					match self.selected.ty {
 					SelectType::Zone => {
 						if let Some(winner) = self[(self.selected.x, self.selected.y)].winner {
 							self.text = if winner == Empty {
-								format!("Nope, no more free tile over here.\n")
+								format!("Nope, no more free tile over here.")
 							} else {
-								format!("Nope, you can't! The zone is already won by {}.\n", winner)
-							} + "Choose in which zone you will play.";
+								format!("Nope, you can't! The zone is already won by {}.", winner)
+							} + &nl!() + "Choose in which zone you will play.";
 						} else {
 							self.selected.ty = SelectType::SelCell(self.selected.x, self.selected.y);
 							self.selected.x = 1;
 							self.selected.y = 1;
-							self.text = "Right.\n".to_owned() + "Which tile?";
+							self.text = "Right.".to_owned() + &nl!() + "Which tile?";
 						}
 					}
 					SelectType::SelCell(zone_x, zone_y) => {
 						match self.play(zone_x, zone_y, self.selected.x, self.selected.y) {
 							Ok(None) => {
-								self.text = "Really guys? Well, that's a draw.\n".to_owned()
+								self.text = "Really guys? Well, that's a draw.".to_owned() + &nl!()
 									+ "Well played though! That was actually intense!";
-								break None;
+								break Ok(None);
 							}
 							Ok(Some(winner)) => {
-								self.text = "WOOOOOHOOOOO!!!! Seems like we have a winner!\n".to_owned()
-								 + &format!("Well done player {}!\n", self.player + 1)
-								 + &format!("Player {}, maybe you wanna ask a rematch?\n",
-								 	(self.player + 1) % 2 + 1);
-								break Some(winner);
+								self.text = "WOOOOOHOOOOO!!!! Seems like we have a winner!".to_owned() + &nl!()
+								 + &format!("Well done player {}!", self.player + 1) + &nl!()
+								 + &format!("Player {}, maybe you wanna ask a rematch?",
+								 	(self.player + 1) % 2 + 1) + &nl!();
+								break Ok(Some(winner));
 							}
 							Err(true) => {
-								self.text = "Done.\n".to_owned()
+								self.text = "Done.".to_owned() + &nl!()
 								 + "Where to play now?";
 								if self[(self.selected.x, self.selected.y)].winner == None {
 									self.selected.ty = SelectType::SelCell(self.selected.x, self.selected.y);
@@ -186,18 +195,24 @@ impl Table {
 								self.player = (1 + self.player) % 2;
 							}
 							Err(false) => {
-								self.text = "Sneaky one, but you can't play where someone already played!\n".to_owned()
+								self.text = "Sneaky one, but you can't play where someone already played!".to_owned() + &nl!()
 								 + "Choose on which tile you'll play.";
 							}
 						}
 					},
 				},
+				Key(KeyEvent { code: Char('c'), kind: Press, modifiers, .. }) => {
+					if modifiers.contains(KeyModifiers::CONTROL) {
+						self.text = "Exiting the game....".to_owned() + &nl!();
+						break Err(());
+					}
+				}
 				_ => (),
 			}
 			self.disp()?;
 		};
 		self.disp()?;
-		self.term.move_cursor_to(0, 19)?;
+        self.out.queue(crossterm::cursor::Show)?;
 		Ok(())
 	}
 
@@ -205,7 +220,7 @@ impl Table {
 		let cell_type = Cell::from_player(self.player);
 
 		let cell = &mut self[(z_x, z_y)][(cx, cy)];
-		if cell_type == *cell {
+		if *cell != Empty {
 			return Err(false);
 		}
 		*cell = cell_type;
@@ -257,46 +272,60 @@ impl Table {
 	}
 
 	fn disp(&mut self) -> io::Result<()> {
-		self.term.clear_screen()?;
 		for y in [0, 4, 8, 12] {
-			self.term.move_cursor_to(0, y)?;
-			write!(self.term, "#-------#-------#-------#")?;
+			self.out.queue(cursor::MoveTo(0, y))?
+			.queue(PrintSt("#-------#-------#-------#".stylize()))?;
 		}
 		for zone_y in 0..3 {
 			for cell_y in 0..3 {
-				self.term.move_cursor_to(0, 1 + (zone_y as usize * 4) + cell_y as usize)?;
+				self.out.queue(cursor::MoveTo(0, 1 + (zone_y as u16 * 4) + cell_y as u16))?;
 				for zone_x in 0..3 {
-					let mut style = console::Style::new();
+					let mut style = ContentStyle::new();
+					//style.background_color = Some(Color::Black);
 					if let Some(winner) = self[(zone_x, zone_y)].winner {
-						style = style.bg(winner.get_color()).on_bright();
+						style.background_color = Some(winner.get_color());
+						style.foreground_color = Some(Color::Black);
 					}
 					if let Selection { ty: SelectType::Zone, x, y } = self.selected {
 						if x == zone_x && y == zone_y {
-							style = style.bg(console::Color::Black).on_bright();
+							style.foreground_color = style.background_color;
+							style.background_color = Some(Color::Grey);
 						}
 					}
-					write!(self.term, "|")?;
-					write!(self.term, "{}", style.apply_to(' '))?;
+					self.out.queue(PrintSt('|'.stylize()))?;
 					for cell_x in 0..3 {
-						write!(self.term, "{}{}",
-							style.apply_to(self[(zone_x, zone_y)][(cell_x, cell_y)]),
-							style.apply_to(' '))?;
+						self.out.queue(PrintSt(StyledContent::new(style.clone(), ' ')))?;
+						let cell = self[(zone_x, zone_y)][(cell_x, cell_y)];
+						let mut styled_cell = StyledContent::new(style.clone(), cell).bold();
+						if style.foreground_color == None {
+							styled_cell = styled_cell.with(cell.get_color()).bold();
+						}
+						self.out.queue(PrintSt(styled_cell))?;
 					}
+					self.out.queue(PrintSt(StyledContent::new(style, ' ')))?;
 				}
-				write!(self.term, "|\n")?;
+				self.out.queue(PrintSt("|".stylize()))?;
 			}
 		}
-		self.term.move_cursor_to(0, 13)?;
-		write!(self.term, "Turn to player {} ({})\n", self.player + 1, Cell::from_player(self.player))?;
-		self.term.move_cursor_to(0, 15)?;
-		self.term.write_line(&self.text)?;
+		self.out
+			.queue(cursor::MoveTo(0, 13))?
+			.queue(PrintSt((format!(
+				"Turn to player {} ({})",
+				self.player + 1,
+				Cell::from_player(self.player).to_string().with(Cell::from_player(self.player).get_color()).bold()
+			) + &nl!()).stylize()))?
+			.queue(cursor::MoveTo(0, 15))?
+			.queue(PrintSt(self.text.clone().stylize()))?
+			.queue(Clear(crossterm::terminal::ClearType::FromCursorDown))?;
 
 		if let Selection { ty: SelectType::SelCell(zx, zy), x, y } = self.selected {
-			self.term.move_cursor_to((2 + 2*x + 8*zx) as usize, (1 + y + 4*zy) as usize)?;
-			self.term.show_cursor()?;
+			self.out
+				.queue(cursor::MoveTo((2 + 2*x + 8*zx) as u16, (1 + y + 4*zy) as u16))?
+				.queue(cursor::Show)?;
 		} else {
-			self.term.hide_cursor()?;
+			self.out.queue(cursor::Hide)?;
 		}
+		self.out.flush()?;
 		Ok(())
 	}
 }

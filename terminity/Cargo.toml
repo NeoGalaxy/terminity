@@ -1,0 +1,16 @@
+[package]
+name = "terminity"
+version = "0.1.0"
+authors = ["Gwennan Eliezer <naeiogalaxy@gmail.com>"]
+edition = "2021"
+default-run = "terminity"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+terminity_widgets = { version = "*", path = "../terminity_widgets" }
+crossterm = { version = "0.25", features = ["event-stream"] }
+rand = "*"
+console = "0.15"
+structopt = "0.3"
+lazy_static = "1.4"
