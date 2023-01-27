@@ -7,4 +7,6 @@ edition = "2021"
 
 [dependencies]
 terminity_widgets_proc = { version = "*", path = "../terminity_widgets_proc" }
+unicode-segmentation = "1.10"
+strip-ansi-escapes = "0.1"
 crossterm = "0.25"

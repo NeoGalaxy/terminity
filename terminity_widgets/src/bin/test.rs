@@ -4,15 +4,15 @@ use terminity_widgets::frame;
 
 struct Img {
 	content: Vec<String>,
-	size: (u16, u16)
+	size: (usize, usize)
 }
 
 impl Widget for Img {
-	fn displ_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
+	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		f.write_str(&self.content[line as usize])
 	}
-	fn size(&self) -> &(u16, u16) {
-		&self.size
+	fn size(&self) -> (usize, usize) {
+		self.size.clone()
 	}
 }
 

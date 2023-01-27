@@ -7,8 +7,8 @@ use syn::{parse_macro_input, DeriveInput};
 struct Widget {
 	id: char,
 	//var: Vec<TokenTree>,
-	i: Option<u16>,
-	//index: u16
+	i: Option<usize>,
+	//index: usize
 	location: Vec<TokenTree>
 }
 
@@ -200,12 +200,12 @@ pub fn frame(tokens: TokenStream) -> TokenStream {
 	let tmp = lines.into_iter().map(|(prefix, line_data)| {
 		let mut interior_text = TokenStream::new();
 		interior_text.extend(line_data.into_iter().map(|((w_index, w_line_index), postfix)| {
-			// (Idx, u16): the index of the widget and the line it has to display
+			// (Idx, usize): the index of the widget and the line it has to display
 			let mut tuple2_arg = TokenStream::new();
 			tuple2_arg.extend(w_index.into_iter());
 			tuple2_arg.extend([
 				TokenTree::Punct(Punct::new(',', Spacing::Alone)),
-				TokenTree::Literal(Literal::u16_unsuffixed(w_line_index)),
+				TokenTree::Literal(Literal::usize_unsuffixed(w_line_index)),
 			].into_iter());
 			// (<tuple2>, String): the Widget line display data + its suffix
 			let mut tuple1_arg = TokenStream::new();

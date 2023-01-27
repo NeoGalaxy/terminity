@@ -6,6 +6,6 @@ pub use terminity_widgets_proc::frame;
 pub mod widgets;
 
 pub trait Widget {
-	fn displ_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result;
-	fn size(&self) -> &(u16, u16);
+	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result;
+	fn size(&self) -> (usize, usize);
 }
