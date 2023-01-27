@@ -8,10 +8,11 @@ use std::{
 use super::Game;
 use crossterm::terminal::Clear;
 use crossterm::{QueueableCommand, cursor};
-use crossterm::style::{Stylize, Color, ContentStyle, PrintStyledContent as PrintSt, StyledContent};
+use crossterm::style::{Stylize, Color, ContentStyle};
 use crossterm::event::{self, KeyModifiers};
 use Tile::*;
 use terminity_widgets::widgets::frame::Frame;
+use terminity_widgets::widgets::text::{Text, Align};
 use terminity_widgets::{frame, Widget};
 
 macro_rules! nl {
@@ -25,19 +26,18 @@ pub struct SuperTTT ();
 
 impl Game for SuperTTT {
 	fn run(&self, out: &mut dyn io::Write) -> io::Result<()> {
-		Table::new(out).run()
+		GameArea::new(out).run()
 	}
 }
 
 type Player = u8;
 
-struct Table<'a> {
+struct GameArea<'a> {
 	pub out: &'a mut dyn io::Write,
-	//pub values: [Zone; 9],
 	pub frame: Frame<usize, Zone, [Zone; 9]>,
 	pub selected: Selection,
 	pub player: u8,
-	pub text: String
+	pub text: Text<5>
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -47,7 +47,7 @@ struct Selection {
 	y: u8,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum SelectType {
 	SelCell(u8, u8),
 	Zone,
@@ -57,14 +57,19 @@ enum SelectType {
 struct Zone {
 	pub values: [Tile; 9],
 	pub winner: Option<Tile>,
+	pub selected: bool
 }
 
 impl Widget for Zone {
-    fn displ_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
+    fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let mut style = ContentStyle::new();
         if let Some(winner) = self.winner {
 			style.background_color = Some(winner.get_color());
 			style.foreground_color = Some(Color::Black);
+		}
+		if self.selected {
+			style.background_color = Some(Color::Grey);
+			style.foreground_color = style.background_color;
 		}
 		for cell_x in 0..3 {
 			f.write_fmt(format_args!("{}", &style.apply(' ').to_string()))?;
@@ -78,7 +83,7 @@ impl Widget for Zone {
 		f.write_fmt(format_args!("{}", &style.apply(' ').to_string()))?;
 		Ok(())
     }
-    fn size(&self) -> &(u16, u16) { &(7, 3) }
+    fn size(&self) -> (usize, usize) { (7, 3) }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -121,18 +126,19 @@ impl Default for Zone {
 	fn default() -> Self {
 		Self {
 			values: [Empty; 9],
-			winner: None
+			winner: None,
+			selected: false
 		}
 	}
 }
 
-impl Index<(u8, u8)> for Table<'_> {
+impl Index<(u8, u8)> for GameArea<'_> {
 	type Output = Zone;
 	fn index(&self, (x, y): (u8, u8)) -> &Self::Output {
 		&self.frame[(x + 3*y) as usize]
 	}
 }
-impl IndexMut<(u8, u8)> for Table<'_> {
+impl IndexMut<(u8, u8)> for GameArea<'_> {
 	fn index_mut(&mut self, (x, y): (u8, u8)) -> &mut Self::Output {
 		&mut self.frame[(x + 3*y) as usize]
 	}
@@ -150,9 +156,10 @@ impl IndexMut<(u8, u8)> for Zone {
 	}
 }
 
-impl<'a> Table<'a> {
+impl<'a> GameArea<'a> {
 	fn new(out: &'a mut dyn io::Write) -> Self {
-		let values: [Zone; 9] = Default::default();
+		let mut values: [Zone; 9] = Default::default();
+		values[4].selected = true;
 		Self {
 			out,
 			selected: Selection { ty:SelectType::Zone, x:1, y:1 },
@@ -163,22 +170,30 @@ impl<'a> Table<'a> {
 					'3': [3], '4': [4], '5': [5],
 					'6': [6], '7': [7], '8': [8]
 				},
-				"#-------#-------#-------#"
-				"|0000000|1111111|2222222|"
-				"|0000000|1111111|2222222|"
-				"|0000000|1111111|2222222|"
-				"#-------#-------#-------#"
-				"|3333333|4444444|5555555|"
-				"|3333333|4444444|5555555|"
-				"|3333333|4444444|5555555|"
-				"#-------#-------#-------#"
-				"|6666666|7777777|8888888|"
-				"|6666666|7777777|8888888|"
-				"|6666666|7777777|8888888|"
-				"#-------#-------#-------#"
+				"                      #-------#-------#-------#                      "
+				"                      |0000000|1111111|2222222|                      "
+				"                      |0000000|1111111|2222222|                      "
+				"                      |0000000|1111111|2222222|                      "
+				"                      #-------#-------#-------#                      "
+				"                      |3333333|4444444|5555555|                      "
+				"                      |3333333|4444444|5555555|                      "
+				"                      |3333333|4444444|5555555|                      "
+				"                      #-------#-------#-------#                      "
+				"                      |6666666|7777777|8888888|                      "
+				"                      |6666666|7777777|8888888|                      "
+				"                      |6666666|7777777|8888888|                      "
+				"                      #-------#-------#-------#                      "
 				),
-			text: "Welcome to Super tic tac toe!".to_owned() + &nl!()
-					+ "Choose in which zone you will play first. You won't be able to cancel!"
+			text: Text {
+				content: [
+					"".to_owned(),
+					"".to_owned(),
+					"Welcome to Super tic tac toe!".to_owned(),
+					"Choose in which zone you will play first. You won't be able to cancel!".to_owned(),
+					"".to_owned()
+				],
+				align: Align::Center, padding: ' ', width: 70,
+			}
 		}
 	}
 
@@ -186,6 +201,8 @@ impl<'a> Table<'a> {
 		use event::{Event::Key, KeyEvent, KeyCode::*, KeyEventKind::*};
 		self.disp()?;
 		let _winner = loop {
+			let coords = (self.selected.x, self.selected.y);
+			self[coords].selected = false;
 			match event::read()? {
 				Key(KeyEvent { code: Left, kind: Press, .. }) =>
 					if self.selected.x > 0 {self.selected.x -= 1},
@@ -198,36 +215,42 @@ impl<'a> Table<'a> {
 				Key(KeyEvent { code: Enter, kind: Press, .. }) =>
 					match self.selected.ty {
 					SelectType::Zone => {
+						self.text.clear();
 						if let Some(winner) = self[(self.selected.x, self.selected.y)].winner {
-							self.text = if winner == Empty {
+							self.text[2] = if winner == Empty {
 								format!("Nope, no more free tile over here.")
 							} else {
 								format!("Nope, you can't! The zone is already won by {}.", winner)
-							} + &nl!() + "Choose in which zone you will play.";
+							};
+							self.text[3] = "Choose in which zone you will play.".to_string();
 						} else {
 							self.selected.ty = SelectType::SelCell(self.selected.x, self.selected.y);
 							self.selected.x = 1;
 							self.selected.y = 1;
-							self.text = "Right.".to_owned() + &nl!() + "Which tile?";
+							self.text[2] = "Right.".to_owned();
+							self.text[3] = "Which tile?".to_owned();
 						}
 					}
 					SelectType::SelCell(zone_x, zone_y) => {
 						match self.play(zone_x, zone_y, self.selected.x, self.selected.y) {
 							Ok(None) => {
-								self.text = "Really guys? Well, that's a draw.".to_owned() + &nl!()
-									+ "Well played though! That was actually intense!";
+								self.text.clear();
+								self.text[2] = "Really guys? That's a draw.".to_owned();
+								self.text[3] = "Well played though, that was intense!".to_owned();
 								break Ok(None);
 							}
 							Ok(Some(winner)) => {
-								self.text = "WOOOOOHOOOOO!!!! Seems like we have a winner!".to_owned() + &nl!()
-								 + &format!("Well done player {}!", self.player + 1) + &nl!()
-								 + &format!("Player {}, maybe you wanna ask a rematch?",
-								 	(self.player + 1) % 2 + 1) + &nl!();
+								self.text.clear();
+								self.text[2] = "WOOOOOHOOOOO!!!! Seems like we have a winner!".to_owned();
+								self.text[3] = format!("Well done player {}!", self.player + 1);
+								self.text[4] = format!("Player {}, maybe you wanna ask a rematch?",
+								 	(self.player + 1) % 2 + 1);
 								break Ok(Some(winner));
 							}
 							Err(true) => {
-								self.text = "Done.".to_owned() + &nl!()
-								 + "Where to play now?";
+								self.text.clear();
+								self.text[2] = "Done.".to_owned();
+								self.text[3] = "Where to play now?".to_owned();
 								if self[(self.selected.x, self.selected.y)].winner == None {
 									self.selected.ty = SelectType::SelCell(self.selected.x, self.selected.y);
 									self.selected.x = 1;
@@ -240,19 +263,25 @@ impl<'a> Table<'a> {
 								self.player = (1 + self.player) % 2;
 							}
 							Err(false) => {
-								self.text = "Sneaky one, but you can't play where someone already played!".to_owned() + &nl!()
-								 + "Choose on which tile you'll play.";
+								self.text.clear();
+								self.text[2] = "Sneaky one, but you can't play where someone already played!".to_owned();
+								self.text[3] = "Choose on which tile you'll play.".to_string();
 							}
 						}
 					},
 				},
 				Key(KeyEvent { code: Char('c'), kind: Press, modifiers, .. }) => {
 					if modifiers.contains(KeyModifiers::CONTROL) {
-						self.text = "Exiting the game....".to_owned() + &nl!();
+						self.text.clear();
+						self.text[2] = "Exiting the game....".to_owned() + &nl!();
 						break Err(());
 					}
 				}
 				_ => (),
+			}
+			if self.selected.ty == SelectType::Zone {
+				let coords = (self.selected.x, self.selected.y);
+				self[coords].selected = true;
 			}
 			self.disp()?;
 		};
@@ -317,51 +346,19 @@ impl<'a> Table<'a> {
 	}
 
 	fn disp(&mut self) -> io::Result<()> {
-		for y in [0, 4, 8, 12] {
-			self.out.queue(cursor::MoveTo(0, y))?
-			.queue(PrintSt("#-------#-------#-------#".stylize()))?;
-		}
-		for zone_y in 0..3 {
-			for cell_y in 0..3 {
-				self.out.queue(cursor::MoveTo(0, 1 + (zone_y as u16 * 4) + cell_y as u16))?;
-				for zone_x in 0..3 {
-					let mut style = ContentStyle::new();
-					//style.background_color = Some(Color::Black);
-					if let Some(winner) = self[(zone_x, zone_y)].winner {
-						style.background_color = Some(winner.get_color());
-						style.foreground_color = Some(Color::Black);
-					}
-					if let Selection { ty: SelectType::Zone, x, y } = self.selected {
-						if x == zone_x && y == zone_y {
-							style.foreground_color = style.background_color;
-							style.background_color = Some(Color::Grey);
-						}
-					}
-					self.out.queue(PrintSt('|'.stylize()))?;
-					for cell_x in 0..3 {
-						self.out.queue(PrintSt(StyledContent::new(style.clone(), ' ')))?;
-						let cell = self[(zone_x, zone_y)][(cell_x, cell_y)];
-						let mut styled_cell = StyledContent::new(style.clone(), cell).bold();
-						if style.foreground_color == None {
-							styled_cell = styled_cell.with(cell.get_color()).bold();
-						}
-						self.out.queue(PrintSt(styled_cell))?;
-					}
-					self.out.queue(PrintSt(StyledContent::new(style, ' ')))?;
-				}
-				self.out.queue(PrintSt("|".stylize()))?;
-			}
-		}
-		self.out
-			.queue(cursor::MoveTo(0, 13))?
-			.queue(PrintSt((format!(
-				"Turn to player {} ({})",
-				self.player + 1,
-				Tile::from_player(self.player).to_string().with(Tile::from_player(self.player).get_color()).bold()
-			) + &nl!()).stylize()))?
-			.queue(cursor::MoveTo(0, 15))?
-			.queue(PrintSt(self.text.clone().stylize()))?
-			.queue(Clear(crossterm::terminal::ClearType::FromCursorDown))?;
+		self.text[0] = format!(
+			"Turn to player {} ({})",
+			self.player + 1,
+			Tile::from_player(self.player).to_string()
+			.with(Tile::from_player(self.player).get_color()).bold()
+		);
+
+		self.out.queue(cursor::MoveTo(0, 0))?;
+		write!(self.out, "{}", self.frame)?;
+		self.out.queue(cursor::MoveTo(0, 13))?;
+		write!(self.out, "{}", self.text)?;
+			//.queue(PrintSt(self.text.clone().stylize()))?
+		self.out.queue(Clear(crossterm::terminal::ClearType::FromCursorDown))?;
 
 		if let Selection { ty: SelectType::SelCell(zx, zy), x, y } = self.selected {
 			self.out
