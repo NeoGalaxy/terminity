@@ -1,6 +1,8 @@
 use std::fmt::Formatter;
 use crate::Widget;
+use crate::WidgetDisplay;
 
+#[derive(WidgetDisplay)]
 pub struct Frame<Item: Widget> {
 	content: Vec<(String, Vec<((usize, u16), String)>)>,
 	widgets: Vec<Item>,

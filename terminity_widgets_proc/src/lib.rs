@@ -1,6 +1,8 @@
 use std::iter::Extend;
 use proc_macro::{TokenStream, TokenTree, Ident, Punct, Spacing, Group, Literal};
 use proc_macro_error::{emit_error, proc_macro_error};
+use quote::quote;
+use syn::{parse_macro_input, DeriveInput};
 
 struct Widget {
 	id: char,
@@ -97,12 +99,12 @@ pub fn frame(tokens: TokenStream) -> TokenStream {
 						break;
 					}
 					match w.i {
-					    None => todo!(),
-					    Some(w_line_i) => {
+						None => todo!(),
+						Some(w_line_i) => {
 							line_res.push(((w.index, w_line_i), 
 								string_prefix.clone() + &line_content[(end_index + 1)..last_index] + &string_suffix));
 							w.i = Some(w_line_i + 1);
-					    }
+						}
 					}
 						last_index = *i;
 				}
@@ -199,4 +201,27 @@ pub fn tokens(tokens: TokenStream) -> TokenStream {
 		println!(">> {:#?}", token.to_string());
 	}
 	TokenStream::new()
+}
+
+#[proc_macro_derive(WidgetDisplay)]
+pub fn widget_display(tokens: TokenStream) -> TokenStream {
+	let input = parse_macro_input!(tokens as DeriveInput);
+
+	let name = input.ident;
+
+	let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+	let expanded = quote! {
+		impl #impl_generics std::fmt::Display for #name #ty_generics #where_clause {
+			fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+				for i in 0..self.size().1 {
+					self.displ_line(f, i)?;
+					f.write_str(&format!("{}\n\r",
+						crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine)))?;
+				}
+				Ok(())
+			}
+		}
+	};
+	proc_macro::TokenStream::from(expanded)
 }
