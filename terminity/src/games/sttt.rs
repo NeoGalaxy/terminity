@@ -15,12 +15,6 @@ use terminity_widgets::widgets::frame::Frame;
 use terminity_widgets::widgets::text::{Text, Align};
 use terminity_widgets::{frame, Widget};
 
-macro_rules! nl {
-	() => {
-		format!("{}\n\r", Clear(crossterm::terminal::ClearType::UntilNewLine))
-	}
-}
-
 #[derive(Debug)]
 pub struct SuperTTT ();
 
@@ -273,7 +267,7 @@ impl<'a> GameArea<'a> {
 				Key(KeyEvent { code: Char('c'), kind: Press, modifiers, .. }) => {
 					if modifiers.contains(KeyModifiers::CONTROL) {
 						self.text.clear();
-						self.text[2] = "Exiting the game....".to_owned() + &nl!();
+						self.text[2] = "Exiting the game....".to_owned();
 						break Err(());
 					}
 				}
