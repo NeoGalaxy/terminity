@@ -5,6 +5,7 @@ use std::fmt::Formatter;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ops::Index;
+use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(WidgetDisplay)]
 pub struct Frame<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> {
@@ -40,6 +41,41 @@ impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>>
 			widgets,
 			size,
 		}
+	}
+}
+
+impl<
+		Idx: ToOwned<Owned = Idx> + PartialEq + Clone,
+		Item: Widget,
+		Coll: Index<Idx, Output = Item>,
+	> Frame<Idx, Item, Coll>
+{
+	/// Gives the x coordinate of the first occurence of the element
+	/// of index `element_index` in the collection. Panics if the
+	/// line is out of the frame. (As a frame has a fixed size, any
+	/// access outside of it shouldn't occur)
+	pub fn find_x(&self, line: usize, element_index: Idx) -> Option<usize> {
+		macro_rules! str_len {
+			($str:expr) => {
+				String::from_utf8(strip_ansi_escapes::strip($str).unwrap())
+					.unwrap()
+					.graphemes(true)
+					.count()
+			};
+		}
+		self.content[line]
+			.1
+			.iter()
+			.enumerate()
+			.find(|(_, (el, _))| el.0 == element_index)
+			.map(|(i, _)| {
+				self.content[line].1[0..i].iter().fold(
+					str_len!(&self.content[line].0),
+					|tot, ((widget_id, _), suffix)| {
+						tot + self.widgets[(*widget_id).clone()].size().0 + str_len!(suffix)
+					},
+				)
+			})
 	}
 }
 
