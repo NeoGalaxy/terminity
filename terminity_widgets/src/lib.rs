@@ -1,7 +1,7 @@
 use std::fmt::Formatter;
 
-pub use terminity_widgets_proc::WidgetDisplay;
 pub use terminity_widgets_proc::frame;
+pub use terminity_widgets_proc::WidgetDisplay;
 
 pub mod widgets;
 
@@ -10,7 +10,10 @@ pub mod _reexport {
 	pub use crossterm::terminal::ClearType::UntilNewLine;
 }
 
+/// A Widget is defined here as something able to be printed on a square area.
 pub trait Widget {
+	/// Prints the given line of the widget.
 	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result;
+	/// The current size of the widget.
 	fn size(&self) -> (usize, usize);
 }

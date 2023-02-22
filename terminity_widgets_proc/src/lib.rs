@@ -8,11 +8,13 @@ use syn::{parse_macro_input, DeriveInput};
 
 #[proc_macro_error]
 #[proc_macro]
+/// Utility macro to build collection frames. There are currently two syntaxes.
 pub fn frame(tokens: TokenStream) -> TokenStream {
 	proc_macro::TokenStream::from(frame::run(parse_macro_input!(tokens as frame::FrameMacro)))
 }
 
 #[proc_macro_derive(WidgetDisplay)]
+/// Macro implementing Display for Widgets
 pub fn widget_display(tokens: TokenStream) -> TokenStream {
 	let input = parse_macro_input!(tokens as DeriveInput);
 
