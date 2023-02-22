@@ -26,7 +26,7 @@ pub fn widget_display(tokens: TokenStream) -> TokenStream {
 				for i in 0..self.size().1 {
 					self.displ_line(f, i)?;
 					f.write_str(&format!("{}\n\r",
-						crossterm::terminal::Clear(crossterm::terminal::ClearType::UntilNewLine)))?;
+						terminity_widgets::_reexport::Clear(terminity_widgets::_reexport::UntilNewLine)))?;
 				}
 				Ok(())
 			}
