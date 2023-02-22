@@ -351,7 +351,6 @@ impl<'a> GameArea<'a> {
 				break;
 			}
 		}
-		self.out.queue(crossterm::cursor::Show)?;
 		Ok(())
 	}
 

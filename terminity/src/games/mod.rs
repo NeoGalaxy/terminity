@@ -1,14 +1,14 @@
-use std::collections::HashMap;
 use crossterm::QueueableCommand;
+use std::collections::HashMap;
 use std::io::Write;
 
+mod chess;
 mod stratego;
 mod sttt;
-mod chess;
 
 pub struct GameWrapper {
 	game: Box<dyn Game + Send + Sync>,
-	pub name: &'static str
+	pub name: &'static str,
 }
 
 lazy_static! {
@@ -42,6 +42,7 @@ impl GameWrapper {
 			.flush()?;
 		let res = self.game.run(out);
 		out.queue(crossterm::terminal::LeaveAlternateScreen)?
+			.queue(crossterm::cursor::Show)?
 			.queue(crossterm::cursor::RestorePosition)?
 			.flush()?;
 		crossterm::terminal::disable_raw_mode()?;
