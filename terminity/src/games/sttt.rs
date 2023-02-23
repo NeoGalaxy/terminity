@@ -1,3 +1,4 @@
+use core::slice;
 use std::fmt::Write as FmtWrite;
 use std::ops::{Index, IndexMut};
 use std::time::Duration;
@@ -21,15 +22,15 @@ pub struct SuperTTT();
 
 impl Game for SuperTTT {
 	fn run(&self, out: &mut dyn io::Write) -> io::Result<()> {
-		GameArea::new(out).run()
+		GameState::new(out).run()
 	}
 }
 
 type Player = u8;
 
-struct GameArea<'a> {
+struct GameState<'a> {
 	pub out: &'a mut dyn io::Write,
-	pub frame: Frame<usize, Zone, [Zone; 9]>,
+	pub area: Frame<(u8, u8), Zone, GameArea>,
 	pub selected: Selection,
 	pub player: u8,
 	pub text: Text<7>,
@@ -83,6 +84,27 @@ impl Widget for Zone {
 	}
 }
 
+#[derive(Debug, Default)]
+struct GameArea([Zone; 9]);
+
+impl Index<(u8, u8)> for GameArea {
+	type Output = Zone;
+	fn index(&self, (x, y): (u8, u8)) -> &Self::Output {
+		&self.0[(x + 3 * y) as usize]
+	}
+}
+impl IndexMut<(u8, u8)> for GameArea {
+	fn index_mut(&mut self, (x, y): (u8, u8)) -> &mut Self::Output {
+		&mut self.0[(x + 3 * y) as usize]
+	}
+}
+
+impl GameArea {
+	fn iter(&self) -> slice::Iter<Zone> {
+		self.0.iter()
+	}
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(u8)]
 enum Tile {
@@ -126,18 +148,6 @@ impl Default for Zone {
 	}
 }
 
-impl Index<(u8, u8)> for GameArea<'_> {
-	type Output = Zone;
-	fn index(&self, (x, y): (u8, u8)) -> &Self::Output {
-		&self.frame[(x + 3 * y) as usize]
-	}
-}
-impl IndexMut<(u8, u8)> for GameArea<'_> {
-	fn index_mut(&mut self, (x, y): (u8, u8)) -> &mut Self::Output {
-		&mut self.frame[(x + 3 * y) as usize]
-	}
-}
-
 impl Index<(u8, u8)> for Zone {
 	type Output = Tile;
 	fn index(&self, (x, y): (u8, u8)) -> &Self::Output {
@@ -150,10 +160,10 @@ impl IndexMut<(u8, u8)> for Zone {
 	}
 }
 
-impl<'a> GameArea<'a> {
+impl<'a> GameState<'a> {
 	fn new(out: &'a mut dyn io::Write) -> Self {
-		let mut values: [Zone; 9] = Default::default();
-		values[4].selected = true;
+		let mut area: GameArea = Default::default();
+		area[(1, 1)].selected = true;
 		Self {
 			out,
 			selected: Selection {
@@ -162,25 +172,25 @@ impl<'a> GameArea<'a> {
 				y: 1,
 			},
 			player: 0,
-			frame: frame!(
-			values => {
-				'0': 0, '1': 1, '2': 2,
-				'3': 3, '4': 4, '5': 5,
-				'6': 6, '7': 7, '8': 8
-			}
-			"                      #-------#-------#-------#                      "
-			"                      |0000000|1111111|2222222|                      "
-			"                      |0000000|1111111|2222222|                      "
-			"                      |0000000|1111111|2222222|                      "
-			"                      #-------#-------#-------#                      "
-			"                      |3333333|4444444|5555555|                      "
-			"                      |3333333|4444444|5555555|                      "
-			"                      |3333333|4444444|5555555|                      "
-			"                      #-------#-------#-------#                      "
-			"                      |6666666|7777777|8888888|                      "
-			"                      |6666666|7777777|8888888|                      "
-			"                      |6666666|7777777|8888888|                      "
-			"                      #-------#-------#-------#                      "
+			area: frame!(
+				area => {
+					'0': (0, 0), '1': (1, 0), '2': (2, 0),
+					'3': (0, 1), '4': (1, 1), '5': (2, 1),
+					'6': (0, 2), '7': (1, 2), '8': (2, 2),
+				}
+				"                      #-------#-------#-------#                      "
+				"                      |0000000|1111111|2222222|                      "
+				"                      |0000000|1111111|2222222|                      "
+				"                      |0000000|1111111|2222222|                      "
+				"                      #-------#-------#-------#                      "
+				"                      |3333333|4444444|5555555|                      "
+				"                      |3333333|4444444|5555555|                      "
+				"                      |3333333|4444444|5555555|                      "
+				"                      #-------#-------#-------#                      "
+				"                      |6666666|7777777|8888888|                      "
+				"                      |6666666|7777777|8888888|                      "
+				"                      |6666666|7777777|8888888|                      "
+				"                      #-------#-------#-------#                      "
 			),
 			text: Text {
 				content: [
@@ -205,7 +215,7 @@ impl<'a> GameArea<'a> {
 		self.disp()?;
 		let winner = loop {
 			let coords = (self.selected.x, self.selected.y);
-			self[coords].selected = false;
+			self.area[coords].selected = false;
 			match event::read()? {
 				Key(KeyEvent {
 					code: Left,
@@ -250,7 +260,7 @@ impl<'a> GameArea<'a> {
 				}) => match self.selected.ty {
 					SelectType::Zone => {
 						self.text.clear();
-						if let Some(winner) = self[(self.selected.x, self.selected.y)].winner {
+						if let Some(winner) = self.area[(self.selected.x, self.selected.y)].winner {
 							self.text[2] = if winner == Empty {
 								format!("Nope, no more free tile over here.")
 							} else {
@@ -289,7 +299,7 @@ impl<'a> GameArea<'a> {
 								self.text.clear();
 								self.text[2] = "Done.".to_owned();
 								self.text[3] = "Where to play now?".to_owned();
-								if self[(self.selected.x, self.selected.y)].winner == None {
+								if self.area[(self.selected.x, self.selected.y)].winner == None {
 									self.selected.ty =
 										SelectType::SelCell(self.selected.x, self.selected.y);
 									self.selected.x = 1;
@@ -327,7 +337,7 @@ impl<'a> GameArea<'a> {
 			}
 			if self.selected.ty == SelectType::Zone {
 				let coords = (self.selected.x, self.selected.y);
-				self[coords].selected = true;
+				self.area[coords].selected = true;
 			}
 			self.disp()?;
 		};
@@ -357,52 +367,52 @@ impl<'a> GameArea<'a> {
 	fn play(&mut self, z_x: u8, z_y: u8, cx: u8, cy: u8) -> Result<Option<Player>, bool> {
 		let cell_type = Tile::from_player(self.player);
 
-		let cell = &mut self[(z_x, z_y)][(cx, cy)];
+		let cell = &mut self.area[(z_x, z_y)][(cx, cy)];
 		if *cell != Empty {
 			return Err(false);
 		}
 		*cell = cell_type;
 
 		// Line is the same
-		if cell_type == self[(z_x, z_y)][((cx + 1) % 3, cy)]
-			&& cell_type == self[(z_x, z_y)][((cx + 2) % 3, cy)]
+		if cell_type == self.area[(z_x, z_y)][((cx + 1) % 3, cy)]
+			&& cell_type == self.area[(z_x, z_y)][((cx + 2) % 3, cy)]
 		// Column is the same
-		||     cell_type == self[(z_x, z_y)][(cx, (cy + 1) % 3)]
-			&& cell_type == self[(z_x, z_y)][(cx, (cy + 2) % 3)]
+		||     cell_type == self.area[(z_x, z_y)][(cx, (cy + 1) % 3)]
+			&& cell_type == self.area[(z_x, z_y)][(cx, (cy + 2) % 3)]
 		// On the first diagonal and same as all on the diagonal
 		||     cx == cy
-			&& cell_type == self[(z_x, z_y)][((cx + 1) % 3, (cy + 1) % 3)]
-			&& cell_type == self[(z_x, z_y)][((cx + 2) % 3, (cy + 2) % 3)]
+			&& cell_type == self.area[(z_x, z_y)][((cx + 1) % 3, (cy + 1) % 3)]
+			&& cell_type == self.area[(z_x, z_y)][((cx + 2) % 3, (cy + 2) % 3)]
 		// On the second diagonal and same as all on the diagonal
 		||     cx + cy == 2
-			&& cell_type == self[(z_x, z_y)][((cx + 1) % 3, (cy + 2) % 3)]
-			&& cell_type == self[(z_x, z_y)][((cx + 2) % 3, (cy + 1) % 3)]
+			&& cell_type == self.area[(z_x, z_y)][((cx + 1) % 3, (cy + 2) % 3)]
+			&& cell_type == self.area[(z_x, z_y)][((cx + 2) % 3, (cy + 1) % 3)]
 		{
 			// Mark zone as winned
-			self[(z_x, z_y)].winner = Some(cell_type);
+			self.area[(z_x, z_y)].winner = Some(cell_type);
 
 			// If line is the same
-			if Some(cell_type) == self[((z_x + 1) % 3, z_y)].winner
-				&& Some(cell_type) == self[((z_x + 2) % 3, z_y)].winner
+			if Some(cell_type) == self.area[((z_x + 1) % 3, z_y)].winner
+				&& Some(cell_type) == self.area[((z_x + 2) % 3, z_y)].winner
 			// column is the same
-			||     Some(cell_type) == self[(z_x, (z_y + 1) % 3)].winner
-				&& Some(cell_type) == self[(z_x, (z_y + 2) % 3)].winner
+			||     Some(cell_type) == self.area[(z_x, (z_y + 1) % 3)].winner
+				&& Some(cell_type) == self.area[(z_x, (z_y + 2) % 3)].winner
 			// on the first diagonal and same as all on the diagonal
 			||     z_x == z_y
-				&& Some(cell_type) == self[((z_x + 1) % 3, (z_y + 1) % 3)].winner
-				&& Some(cell_type) == self[((z_x + 2) % 3, (z_y + 2) % 3)].winner
+				&& Some(cell_type) == self.area[((z_x + 1) % 3, (z_y + 1) % 3)].winner
+				&& Some(cell_type) == self.area[((z_x + 2) % 3, (z_y + 2) % 3)].winner
 			// on the second diagonal and same as all on the diagonal
 			||     z_x + z_y == 2
-				&& Some(cell_type) == self[((z_x + 1) % 3, (z_y + 2) % 3)].winner
-				&& Some(cell_type) == self[((z_x + 2) % 3, (z_y + 1) % 3)].winner
+				&& Some(cell_type) == self.area[((z_x + 1) % 3, (z_y + 2) % 3)].winner
+				&& Some(cell_type) == self.area[((z_x + 2) % 3, (z_y + 1) % 3)].winner
 			{
 				return Ok(Some(self.player));
 			}
-		} else if self[(z_x, z_y)].values.iter().all(|c| *c != Empty) {
-			self[(z_x, z_y)].winner = Some(Empty);
+		} else if self.area[(z_x, z_y)].values.iter().all(|c| *c != Empty) {
+			self.area[(z_x, z_y)].winner = Some(Empty);
 		}
 
-		if self[(z_x, z_y)].winner != None && self.frame.iter().all(|z| z.winner != None) {
+		if self.area[(z_x, z_y)].winner != None && self.area.iter().all(|z| z.winner != None) {
 			Ok(None)
 		} else {
 			Err(true)
@@ -420,7 +430,7 @@ impl<'a> GameArea<'a> {
 		);
 
 		self.out.queue(cursor::MoveTo(0, 0))?;
-		write!(self.out, "{}", self.frame)?;
+		write!(self.out, "{}", self.area)?;
 		self.out.queue(cursor::MoveTo(0, 13))?;
 		write!(self.out, "{}", self.text)?;
 		//.queue(PrintSt(self.text.clone().stylize()))?
@@ -433,10 +443,9 @@ impl<'a> GameArea<'a> {
 			y,
 		} = self.selected
 		{
-			let y_index = (1 + y + 4 * zy) as usize;
-			let x_index =
-				1 + 2 * x as u16
-					+ self.frame.find_x(y_index, (zx + zy * 3) as usize).unwrap() as u16;
+			let (mut x_index, mut y_index) = self.area.find_pos(&(zx, zy)).unwrap();
+			y_index += y as usize;
+			x_index += 1 + 2 * x as usize;
 			self.out
 				.queue(cursor::MoveTo(x_index as u16, y_index as u16))?
 				.queue(cursor::Show)?;

@@ -1,7 +1,10 @@
 use crate as terminity_widgets;
 use crate::Widget;
 use crate::WidgetDisplay;
+
+use std::collections::HashMap;
 use std::fmt::Formatter;
+use std::hash::Hash;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ops::Index;
@@ -12,6 +15,7 @@ pub struct Frame<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Outpu
 	content: Vec<(String, Vec<((Idx, usize), String)>)>,
 	widgets: Coll,
 	size: (usize, usize),
+	positions: HashMap<Idx, (usize, usize)>,
 }
 
 impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> Widget
@@ -31,15 +35,41 @@ impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> W
 	}
 }
 
-impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>>
-	Frame<Idx, Item, Coll>
+impl<
+		Idx: ToOwned<Owned = Idx> + Eq + Hash + Clone,
+		Item: Widget,
+		Coll: Index<Idx, Output = Item>,
+	> Frame<Idx, Item, Coll>
 {
 	pub fn new(content: Vec<(String, Vec<((Idx, usize), String)>)>, widgets: Coll) -> Self {
+		macro_rules! str_len {
+			($str:expr) => {
+				String::from_utf8(strip_ansi_escapes::strip($str).unwrap())
+					.unwrap()
+					.graphemes(true)
+					.count()
+			};
+		}
+
 		let size = (content[0].0.len(), content.len());
+		let mut positions = HashMap::new();
+		for (y_pos, (prefix, line)) in content.iter().enumerate() {
+			let mut x_pos = 0;
+			let mut previous = prefix;
+			for (item, suffix) in line {
+				x_pos += str_len!(previous);
+				if item.1 == 0 {
+					positions.insert(item.0.clone(), (x_pos, y_pos));
+				}
+				x_pos += widgets[item.0.to_owned()].size().0;
+				previous = suffix;
+			}
+		}
 		Self {
 			content,
 			widgets,
 			size,
+			positions,
 		}
 	}
 }
@@ -72,10 +102,22 @@ impl<
 				self.content[line].1[0..i].iter().fold(
 					str_len!(&self.content[line].0),
 					|tot, ((widget_id, _), suffix)| {
-						tot + self.widgets[(*widget_id).clone()].size().0 + str_len!(suffix)
+						tot + self.widgets[(*widget_id).to_owned()].size().0 + str_len!(suffix)
 					},
 				)
 			})
+	}
+}
+
+impl<Idx: ToOwned<Owned = Idx> + Eq + Hash, Item: Widget, Coll: Index<Idx, Output = Item>>
+	Frame<Idx, Item, Coll>
+{
+	/// Gives the coordinates of the first occurence of the element
+	/// of index `element_index` in the collection. Panics if the
+	/// line is out of the frame. (As a frame has a fixed size, any
+	/// access outside of it shouldn't occur)
+	pub fn find_pos(&self, element_index: &Idx) -> Option<(usize, usize)> {
+		self.positions.get(element_index).copied()
 	}
 }
 
