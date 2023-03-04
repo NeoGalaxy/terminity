@@ -9,7 +9,7 @@ default-run = "terminity"
 
 [dependencies]
 terminity_widgets = { version = "*", path = "../terminity_widgets" }
-crossterm = { version = "0.25", features = ["event-stream"] }
+crossterm = { version = "0.26", features = ["event-stream"] }
 rand = "*"
 #console = "0.15"
 structopt = "0.3"

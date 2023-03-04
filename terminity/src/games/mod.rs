@@ -1,6 +1,13 @@
-use crossterm::QueueableCommand;
+use crossterm::event::{
+	DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
+	EnableFocusChange, EnableMouseCapture,
+};
+use crossterm::{execute, QueueableCommand};
 use std::collections::HashMap;
-use std::io::Write;
+use std::io::{stdout, Write};
+use std::panic::{self, catch_unwind, resume_unwind, RefUnwindSafe};
+
+use std::sync::{Arc, Mutex};
 
 mod chess;
 mod stratego;
@@ -35,23 +42,58 @@ lazy_static! {
 }
 
 impl GameWrapper {
-	pub fn run(&self, out: &mut dyn Write) -> std::io::Result<()> {
+	pub fn run(&self) -> std::io::Result<()> {
+		// Set up new hook
+		let old_hook = panic::take_hook();
+		let panic_buffer = Arc::new(Mutex::new(String::with_capacity(200)));
+		panic::set_hook({
+			let panic_buffer = panic_buffer.clone();
+			Box::new(move |info| {
+				panic_buffer.lock().unwrap().push_str(&format!(
+					"payload: {:?}\nlocation: {:?}",
+					info.payload().downcast_ref::<&str>(),
+					info.location()
+				));
+			})
+		});
+		// Prepare game
 		crossterm::terminal::enable_raw_mode()?;
-		out.queue(crossterm::terminal::EnterAlternateScreen)?
+		execute!(stdout(), EnableBracketedPaste, EnableFocusChange, EnableMouseCapture,)?;
+		stdout()
 			.queue(crossterm::cursor::SavePosition)?
+			.queue(crossterm::terminal::EnterAlternateScreen)?
+			.queue(crossterm::cursor::MoveTo(0, 0))?
 			.flush()?;
-		let res = self.game.run(out);
-		out.queue(crossterm::terminal::LeaveAlternateScreen)?
-			.queue(crossterm::cursor::Show)?
+		// Game!
+		let res = catch_unwind(move || self.game.run(&mut stdout()));
+		// Restore console state
+		stdout()
+			.queue(crossterm::terminal::LeaveAlternateScreen)?
 			.queue(crossterm::cursor::RestorePosition)?
+			.queue(crossterm::cursor::Show)?
 			.flush()?;
+		execute!(stdout(), DisableBracketedPaste, DisableFocusChange, DisableMouseCapture,)?;
 		crossterm::terminal::disable_raw_mode()?;
-		res
+		// Restore panic state and manage any error during game
+		panic::set_hook(old_hook);
+		match res {
+			Ok(r) => r,
+			Err(e) => {
+				eprintln!("Thread panicked: {}", panic_buffer.lock().unwrap());
+				resume_unwind(e)
+			}
+		}
 	}
 }
 
-trait Game {
+trait Game: RefUnwindSafe {
 	fn run(&self, out: &mut dyn Write) -> std::io::Result<()>;
+}
+
+impl Game for () {
+	fn run(&self, _: &mut dyn Write) -> std::io::Result<()> {
+		panic!("Internal error: dummy game running")
+	}
 }
 
 pub fn get(name: &str) -> Option<&'static GameWrapper> {

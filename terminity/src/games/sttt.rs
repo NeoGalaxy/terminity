@@ -140,11 +140,7 @@ impl Display for Tile {
 
 impl Default for Zone {
 	fn default() -> Self {
-		Self {
-			values: [Empty; 9],
-			winner: None,
-			selected: false,
-		}
+		Self { values: [Empty; 9], winner: None, selected: false }
 	}
 }
 
@@ -166,11 +162,7 @@ impl<'a> GameState<'a> {
 		area[(1, 1)].selected = true;
 		Self {
 			out,
-			selected: Selection {
-				ty: SelectType::Zone,
-				x: 1,
-				y: 1,
-			},
+			selected: Selection { ty: SelectType::Zone, x: 1, y: 1 },
 			player: 0,
 			area: frame!(
 				area => {
@@ -217,47 +209,27 @@ impl<'a> GameState<'a> {
 			let coords = (self.selected.x, self.selected.y);
 			self.area[coords].selected = false;
 			match event::read()? {
-				Key(KeyEvent {
-					code: Left,
-					kind: Press,
-					..
-				}) => {
+				Key(KeyEvent { code: Left, kind: Press, .. }) => {
 					if self.selected.x > 0 {
 						self.selected.x -= 1
 					}
 				}
-				Key(KeyEvent {
-					code: Right,
-					kind: Press,
-					..
-				}) => {
+				Key(KeyEvent { code: Right, kind: Press, .. }) => {
 					if self.selected.x < 2 {
 						self.selected.x += 1
 					}
 				}
-				Key(KeyEvent {
-					code: Up,
-					kind: Press,
-					..
-				}) => {
+				Key(KeyEvent { code: Up, kind: Press, .. }) => {
 					if self.selected.y > 0 {
 						self.selected.y -= 1
 					}
 				}
-				Key(KeyEvent {
-					code: Down,
-					kind: Press,
-					..
-				}) => {
+				Key(KeyEvent { code: Down, kind: Press, .. }) => {
 					if self.selected.y < 2 {
 						self.selected.y += 1
 					}
 				}
-				Key(KeyEvent {
-					code: Enter,
-					kind: Press,
-					..
-				}) => match self.selected.ty {
+				Key(KeyEvent { code: Enter, kind: Press, .. }) => match self.selected.ty {
 					SelectType::Zone => {
 						self.text.clear();
 						if let Some(winner) = self.area[(self.selected.x, self.selected.y)].winner {
@@ -321,12 +293,7 @@ impl<'a> GameState<'a> {
 						}
 					}
 				},
-				Key(KeyEvent {
-					code: Char('c'),
-					kind: Press,
-					modifiers,
-					..
-				}) => {
+				Key(KeyEvent { code: Char('c'), kind: Press, modifiers, .. }) => {
 					if modifiers.contains(KeyModifiers::CONTROL) {
 						self.text.clear();
 						self.text[2] = "Exiting the game....".to_owned();
@@ -434,21 +401,13 @@ impl<'a> GameState<'a> {
 		self.out.queue(cursor::MoveTo(0, 13))?;
 		write!(self.out, "{}", self.text)?;
 		//.queue(PrintSt(self.text.clone().stylize()))?
-		self.out
-			.queue(Clear(crossterm::terminal::ClearType::FromCursorDown))?;
+		self.out.queue(Clear(crossterm::terminal::ClearType::FromCursorDown))?;
 
-		if let Selection {
-			ty: SelectType::SelCell(zx, zy),
-			x,
-			y,
-		} = self.selected
-		{
+		if let Selection { ty: SelectType::SelCell(zx, zy), x, y } = self.selected {
 			let (mut x_index, mut y_index) = self.area.find_pos(&(zx, zy)).unwrap();
 			y_index += y as usize;
 			x_index += 1 + 2 * x as usize;
-			self.out
-				.queue(cursor::MoveTo(x_index as u16, y_index as u16))?
-				.queue(cursor::Show)?;
+			self.out.queue(cursor::MoveTo(x_index as u16, y_index as u16))?.queue(cursor::Show)?;
 		} else {
 			self.out.queue(cursor::Hide)?;
 		}

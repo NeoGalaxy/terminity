@@ -1,9 +1,9 @@
-use std::io::{ self, Write };
+use std::io::{self, Write};
 
 use super::Game;
 
 #[derive(Debug)]
-pub struct Stratego ();
+pub struct Stratego();
 
 impl Game for Stratego {
 	// add code here
