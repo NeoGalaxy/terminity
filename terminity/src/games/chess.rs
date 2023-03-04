@@ -8,8 +8,9 @@ use crossterm::event::{
 };
 //use crossterm::{Style, Color as TermColor};
 use crossterm::style::{Color as TermColor, ContentStyle};
-use crossterm::{cursor, event, QueueableCommand};
-use terminity_widgets::{Widget, WidgetDisplay};
+use crossterm::{cursor, event, terminal, QueueableCommand};
+use terminity_widgets::widgets::padder::Padder;
+use terminity_widgets::{MouseEventWidget, ResizableWisget, Widget, WidgetDisplay};
 
 use crate::games::Game;
 
@@ -19,7 +20,10 @@ pub struct Chess();
 
 impl Game for Chess {
 	fn run(&self, out: &mut dyn io::Write) -> io::Result<()> {
-		let mut board = Board::default();
+		let mut board = Padder(
+			Board::default(),
+			terminal::size().map(|(a, b)| (a as usize, b as usize)).unwrap_or((0, 0)),
+		);
 		out.queue(cursor::Hide)?;
 		let mut since_blink: Duration = Duration::new(0, 0);
 		'mainloop: loop {
@@ -41,33 +45,9 @@ impl Game for Chess {
 			use KeyCode::*;
 			use KeyEventKind::*;
 			match event::read()? {
-				Mouse(MouseEvent { kind, mut column, mut row, .. }) => {
-					column = column / 2;
-					if column < 1 || column > 8 || row >= 8 {
+				Mouse(e) => {
+					if board.mouse_event(e) != Some(true) {
 						continue;
-					}
-					if board.rotated {
-						column = 8 - column;
-					} else {
-						column -= 1;
-						row = 7 - row;
-					}
-					let new_pos = (column as usize, row as usize);
-					match kind {
-						MouseEventKind::Moved | MouseEventKind::Drag(_) => {
-							if new_pos == board.cursor_pos {
-								continue;
-							} else {
-								board.cursor_pos = new_pos;
-							}
-						}
-						MouseEventKind::Down(MouseButton::Left) => {
-							board.select();
-						}
-						MouseEventKind::Up(MouseButton::Left) => {
-							board.play();
-						}
-						_ => (),
 					}
 				}
 				Key(KeyEvent { code: Enter, kind: Press, .. }) => {
@@ -108,6 +88,7 @@ impl Game for Chess {
 						break 'mainloop;
 					}
 				}
+				Resize(w, h) => board.resize((w as usize, h as usize)),
 				_ => continue, // Wait another event
 			}
 			since_blink = Duration::new(0, 0);
@@ -124,6 +105,7 @@ struct Board {
 	dark_tile_style: ContentStyle,
 	checked_tile_style: ContentStyle,
 	select_style: ContentStyle,
+	selected_style: ContentStyle,
 	invalid_style: ContentStyle,
 	rotated: bool,
 	cursor_pos: Pos,
@@ -239,6 +221,12 @@ impl Default for Board {
 				underline_color: None,
 				attributes: Default::default(),
 			},
+			selected_style: ContentStyle {
+				foreground_color: Some(TermColor::White),
+				background_color: Some(TermColor::DarkGreen),
+				underline_color: None,
+				attributes: Default::default(),
+			},
 			invalid_style: ContentStyle {
 				foreground_color: Some(TermColor::White),
 				background_color: Some(TermColor::DarkYellow),
@@ -247,8 +235,7 @@ impl Default for Board {
 			},
 			tiles: [
 				[
-					None,
-					//Some(Tile(Rook, White)),
+					Some(Tile(Rook, White)),
 					Some(Tile(Knight, White)),
 					Some(Tile(Bishop, White)),
 					Some(Tile(Queen, White)),
@@ -324,7 +311,7 @@ impl Widget for Board {
 				} else if self.checked_by.contains(&pos) {
 					&self.checked_tile_style
 				} else if self.selected == Some(pos) {
-					&self.select_style
+					&self.selected_style
 				} else if self.invalid.map_or(false, |(p0, p1)| p0 == pos || p1 == pos) {
 					&self.invalid_style
 				} else if (line_nb + i) % 2 == 0 {
@@ -349,6 +336,41 @@ impl Widget for Board {
 			};
 		}
 		Ok(())
+	}
+}
+
+impl MouseEventWidget for Board {
+	type Res = bool;
+	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::Res {
+		let MouseEvent { kind, mut column, mut row, .. } = event;
+		column = column / 2;
+		if column < 1 || column > 8 || row >= 8 {
+			return false;
+		}
+		if self.rotated {
+			column = 8 - column;
+		} else {
+			column -= 1;
+			row = 7 - row;
+		}
+		let new_pos = (column as usize, row as usize);
+		match kind {
+			MouseEventKind::Moved | MouseEventKind::Drag(_) => {
+				if new_pos == self.cursor_pos {
+					return false;
+				} else {
+					self.cursor_pos = new_pos;
+				}
+			}
+			MouseEventKind::Down(MouseButton::Left) => {
+				self.select();
+			}
+			MouseEventKind::Up(MouseButton::Left) => {
+				self.play();
+			}
+			_ => (),
+		}
+		return true;
 	}
 }
 

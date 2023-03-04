@@ -27,8 +27,10 @@ pub fn widget_display(tokens: TokenStream) -> TokenStream {
 			fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 				for i in 0..self.size().1 {
 					self.displ_line(f, i)?;
-					f.write_str(&format!("{}\n\r",
-						terminity_widgets::_reexport::Clear(terminity_widgets::_reexport::UntilNewLine)))?;
+					if i != self.size().1 - 1 {
+						f.write_str(&format!("{}\n\r",
+							terminity_widgets::_reexport::Clear(terminity_widgets::_reexport::UntilNewLine)))?;
+					}
 				}
 				Ok(())
 			}

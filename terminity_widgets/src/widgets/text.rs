@@ -30,7 +30,7 @@ impl<const H: usize> Widget for Text<H> {
 		.unwrap()
 		.graphemes(true)
 		.count();
-		let diff = self.width - width;
+		let diff = self.width.saturating_sub(width);
 		let (left, right) = match self.align {
 			Align::Left => (0, diff),
 			Align::Right => (diff, 0),

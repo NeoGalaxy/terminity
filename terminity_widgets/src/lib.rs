@@ -17,3 +17,14 @@ pub trait Widget {
 	/// The current size of the widget.
 	fn size(&self) -> (usize, usize);
 }
+
+pub trait MouseEventWidget: Widget {
+	type Res;
+	#[must_use]
+	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::Res;
+}
+
+pub trait ResizableWisget {
+	/// Prints the given line of the widget.
+	fn resize(&mut self, size: (usize, usize));
+}

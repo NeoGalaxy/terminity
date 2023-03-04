@@ -65,12 +65,7 @@ impl<
 				previous = suffix;
 			}
 		}
-		Self {
-			content,
-			widgets,
-			size,
-			positions,
-		}
+		Self { content, widgets, size, positions }
 	}
 }
 
@@ -93,19 +88,16 @@ impl<
 					.count()
 			};
 		}
-		self.content[line]
-			.1
-			.iter()
-			.enumerate()
-			.find(|(_, (el, _))| el.0 == element_index)
-			.map(|(i, _)| {
+		self.content[line].1.iter().enumerate().find(|(_, (el, _))| el.0 == element_index).map(
+			|(i, _)| {
 				self.content[line].1[0..i].iter().fold(
 					str_len!(&self.content[line].0),
 					|tot, ((widget_id, _), suffix)| {
 						tot + self.widgets[(*widget_id).to_owned()].size().0 + str_len!(suffix)
 					},
 				)
-			})
+			},
+		)
 	}
 }
 
@@ -159,14 +151,8 @@ mod tests {
 
 	#[test]
 	fn new_array() {
-		let img1 = Img {
-			content: vec!["Hello".to_owned(), "~~~~~".to_owned()],
-			size: (5, 2),
-		};
-		let img2 = Img {
-			content: vec!["World!".to_owned(), "~~~~~~".to_owned()],
-			size: (6, 2),
-		};
+		let img1 = Img { content: vec!["Hello".to_owned(), "~~~~~".to_owned()], size: (5, 2) };
+		let img2 = Img { content: vec!["World!".to_owned(), "~~~~~~".to_owned()], size: (6, 2) };
 		let frame0 = frame!(
 			['H': img1, 'W': img2]
 			r"/==================\"
@@ -184,52 +170,22 @@ mod tests {
 				r"\==================/",
 				""
 			]
-			.join(&format!(
-				"{}\n\r",
-				crate::_reexport::Clear(crate::_reexport::UntilNewLine)
-			))
+			.join(&format!("{}\n\r", crate::_reexport::Clear(crate::_reexport::UntilNewLine)))
 		)
 	}
 
 	#[test]
 	fn extern_collection() {
 		let values = vec![
-			Img {
-				content: vec!["A".to_owned(), "1".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
-			Img {
-				content: vec!["F".to_owned(), "2".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
-			Img {
-				content: vec!["S".to_owned(), "3".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
-			Img {
-				content: vec!["Q".to_owned(), "4".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
-			Img {
-				content: vec!["E".to_owned(), "5".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
-			Img {
-				content: vec!["Z".to_owned(), "6".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
-			Img {
-				content: vec!["K".to_owned(), "7".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
-			Img {
-				content: vec!["U".to_owned(), "8".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
-			Img {
-				content: vec!["O".to_owned(), "9".to_owned(), "é".to_owned()],
-				size: (1, 3),
-			},
+			Img { content: vec!["A".to_owned(), "1".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img { content: vec!["F".to_owned(), "2".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img { content: vec!["S".to_owned(), "3".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img { content: vec!["Q".to_owned(), "4".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img { content: vec!["E".to_owned(), "5".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img { content: vec!["Z".to_owned(), "6".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img { content: vec!["K".to_owned(), "7".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img { content: vec!["U".to_owned(), "8".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img { content: vec!["O".to_owned(), "9".to_owned(), "é".to_owned()], size: (1, 3) },
 		];
 		let frame0 = frame!(
 		values => {
@@ -270,10 +226,7 @@ mod tests {
 				"#-#-#-#",
 				"",
 			]
-			.join(&format!(
-				"{}\n\r",
-				crate::_reexport::Clear(crate::_reexport::UntilNewLine)
-			))
+			.join(&format!("{}\n\r", crate::_reexport::Clear(crate::_reexport::UntilNewLine)))
 		)
 	}
 }
