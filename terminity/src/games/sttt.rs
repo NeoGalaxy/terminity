@@ -1,3 +1,4 @@
+/// A "super tic tac toe". TODO: Explan rules
 use core::slice;
 use std::fmt::Write as FmtWrite;
 use std::ops::{Index, IndexMut};

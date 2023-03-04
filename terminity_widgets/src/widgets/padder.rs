@@ -12,9 +12,9 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 
 #[derive(WidgetDisplay)]
-pub struct Padder<W: Widget>(pub W, pub (usize, usize));
+pub struct AutoPadder<W: Widget>(pub W, pub (usize, usize));
 
-impl<W: Widget> Widget for Padder<W> {
+impl<W: Widget> Widget for AutoPadder<W> {
 	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let content_size = self.0.size();
 		let total_size = self.1;
@@ -40,7 +40,7 @@ impl<W: Widget> Widget for Padder<W> {
 	}
 }
 
-impl<W: MouseEventWidget> MouseEventWidget for Padder<W> {
+impl<W: MouseEventWidget> MouseEventWidget for AutoPadder<W> {
 	type Res = Option<W::Res>;
 	fn mouse_event(&mut self, event: MouseEvent) -> Self::Res {
 		let MouseEvent { column, row, kind, modifiers } = event;
@@ -69,20 +69,20 @@ impl<W: MouseEventWidget> MouseEventWidget for Padder<W> {
 	}
 }
 
-impl<W: Widget> ResizableWisget for Padder<W> {
+impl<W: Widget> ResizableWisget for AutoPadder<W> {
 	fn resize(&mut self, size: (usize, usize)) {
 		self.1 = size;
 	}
 }
 
-impl<W: Widget> Deref for Padder<W> {
+impl<W: Widget> Deref for AutoPadder<W> {
 	type Target = W;
 	fn deref(&self) -> &Self::Target {
 		&self.0
 	}
 }
 
-impl<W: Widget> DerefMut for Padder<W> {
+impl<W: Widget> DerefMut for AutoPadder<W> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		&mut self.0
 	}
