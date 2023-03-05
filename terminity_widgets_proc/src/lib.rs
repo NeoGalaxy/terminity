@@ -1,14 +1,13 @@
 #![warn(missing_docs)]
 
-/*! Crate defining the procedural macros for [terminity_widgets](#).
+/*! Crate defining the procedural macros for
+	[terminity_widgets](https://docs.rs/terminity_widgets/latest/terminity_widgets/index.html).
 
 	This crate defines two macros, [`frame!`] and [`derive(WidgetDisplay)`](widget_display),
 	to help you write your apps with terminity's widgets. This is at a very early development stage,
 	and breaking changes or new macros (as a StructFrame one) are to be foreseen.
 
 */
-
-// TODO: link terminity_widgets
 
 mod frame;
 
@@ -46,8 +45,9 @@ use syn::{parse_macro_input, DeriveInput};
 /// Any occurrence of a character used in the *IndexMap* will be replaced with the widget at the
 /// index corresponding to the associated expression. For instance, in the following example, the
 /// box described with `H`s will be replaced by the lines of `texts[0]`, and the one with `W`s by
-/// the lines of `texts[1]`. See the doc of [Frame](#) (todo: link) for more details on how to use
-/// a frame.
+/// the lines of `texts[1]`. See the doc of
+/// [`Frame`](https://docs.rs/terminity_widgets/latest/terminity_widgets/widgets/frame/struct.Frame.html)
+/// for more details on how to use a frame.
 ///
 /// Example:
 /// ```

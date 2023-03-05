@@ -1,7 +1,17 @@
 [package]
 name = "terminity_widgets_proc"
 version = "0.1.0"
+authors = ["Naeio <naeiogalaxy@gmail.com>"]
 edition = "2021"
+description = "Widgets for TUI"
+readme = "README.md"
+#homepage = 
+repository = "https://github.com/NeoGalaxy/terminity"
+license = "BSD-4-Clause"
+#license-file = "../LICENSE"
+keywords = ["TUI", "UI", "terminal", "game-development"]
+categories = ["game-development", "games"]
+publish = ["terminity"]
 
 [lib]
 proc-macro = true

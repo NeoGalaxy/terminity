@@ -14,7 +14,8 @@ expected to work on windows 8 and older, but might work thanks to
 The very long term goals of this project are to to:
 
  1. Make it easier to build good UI in terminal
- 2. Make terminal games accessible to anyone and everyone. This would be through a windows `.exe` and a smartphone app.
+ 2. Make terminal games accessible to anyone and everyone. This would be through a windows `.exe`
+    and a smartphone app.
  3. Setup a P2P (peer to peer) system allowing to play the games online with anyone, and giving the
 	programmers an API to setup an online (or local offline) game without a mandatory need for a server. 
 
