@@ -11,7 +11,7 @@ license = "BSD-4-Clause"
 #license-file = "../LICENSE"
 keywords = ["TUI", "UI", "terminal", "game-development"]
 categories = ["game-development", "games"]
-#publish = ["terminity_widgets"]
+publish = ["terminity_widgets"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
