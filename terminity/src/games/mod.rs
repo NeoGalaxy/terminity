@@ -1,13 +1,17 @@
-use crossterm::event::{
-	DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
-	EnableFocusChange, EnableMouseCapture,
+use crossterm::{
+	event::{
+		DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
+		EnableFocusChange, EnableMouseCapture,
+	},
+	execute, QueueableCommand,
 };
-use crossterm::{execute, QueueableCommand};
-use std::collections::HashMap;
-use std::io::{stdout, Write};
-use std::panic::{self, catch_unwind, resume_unwind, RefUnwindSafe};
-
-use std::sync::{Arc, Mutex};
+use lazy_static::lazy_static;
+use std::{
+	collections::HashMap,
+	io::{stdout, Write},
+	panic::{self, catch_unwind, resume_unwind, RefUnwindSafe},
+	sync::{Arc, Mutex},
+};
 
 mod chess;
 mod stratego;

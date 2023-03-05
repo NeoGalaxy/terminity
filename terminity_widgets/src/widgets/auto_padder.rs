@@ -1,3 +1,4 @@
+//! Defines the [AutoPadder] widget.
 use crossterm::event::MouseEvent;
 
 use crate as terminity_widgets;
@@ -11,8 +12,37 @@ use std::fmt::Write;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+/// An AutoPadder is a Widget that has a child widget and a target size, and automatically
+/// adds padding around the child widget to center it and have the target size.
+///
+/// This struct aims to be used as transparently as possible by implementing [`Deref`] and [`DerefMut`].
+/// Be however careful when trying to access things as the size of the contained widget, as
+/// you might forget to deref the `AutoPadder`.
+///
+/// if there's an odd quantity of padding to add, the extra space will be on the right and/or bottom.
+///
+/// TODO: Describe behavior on traits.
+///
+/// ```
+/// # use terminity_widgets::widgets::auto_padder::AutoPadder;
+/// use terminity_widgets::{widgets::text::Text, Widget};
+/// use format::lazy_format;
+///
+/// let mut text = AutoPadder(Text::new(["Hello".into(), "".into()], 5), (7, 3));
+///
+/// text[1] = "World".into();
+///
+/// assert_eq!(lazy_format!(|f| text.displ_line(f, 0)).to_string(), " Hello ");
+/// assert_eq!(lazy_format!(|f| text.displ_line(f, 1)).to_string(), " World ");
+/// assert_eq!(lazy_format!(|f| text.displ_line(f, 2)).to_string(), "       ");
+/// ```
 #[derive(WidgetDisplay)]
-pub struct AutoPadder<W: Widget>(pub W, pub (usize, usize));
+pub struct AutoPadder<W: Widget>(
+	/// The contained widget
+	pub W,
+	/// The targeted size
+	pub (usize, usize),
+);
 
 impl<W: Widget> Widget for AutoPadder<W> {
 	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
@@ -41,8 +71,8 @@ impl<W: Widget> Widget for AutoPadder<W> {
 }
 
 impl<W: MouseEventWidget> MouseEventWidget for AutoPadder<W> {
-	type Res = Option<W::Res>;
-	fn mouse_event(&mut self, event: MouseEvent) -> Self::Res {
+	type MouseHandlingResult = Option<W::MouseHandlingResult>;
+	fn mouse_event(&mut self, event: MouseEvent) -> Self::MouseHandlingResult {
 		let MouseEvent { column, row, kind, modifiers } = event;
 		let mut column = column as i32;
 		let mut row = row as i32;

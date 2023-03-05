@@ -11,6 +11,5 @@ default-run = "game"
 terminity_widgets = { version = "*", path = "../terminity_widgets" }
 crossterm = { version = "0.26", features = ["event-stream"] }
 rand = "*"
-#console = "0.15"
 structopt = "0.3"
 lazy_static = "1.4"

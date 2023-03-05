@@ -1,3 +1,4 @@
+//! Defines the [Text] widget.
 use crate as terminity_widgets;
 use crate::Widget;
 use crate::WidgetDisplay;
@@ -8,18 +9,54 @@ use std::ops::Index;
 use std::ops::IndexMut;
 use unicode_segmentation::UnicodeSegmentation;
 
+/// Enum used in [`Text`]. Indicates where the text aligns
 pub enum Align {
+	/// Align text to the left
 	Left,
+	/// Align text to the right
 	Right,
+	/// Centers the text, with an extra space on the right if needed.
 	Center,
 }
 
+/// A [`Widget`] describing a multi-line text. It has a constant number of lines, but that may be
+/// subject to change.
+///
+/// For `Text` to be a well-defined Widget, it needs to know at all times its width and height.
+/// Consequently, it has a `width` attribute, and any line will be padded accordingly to their
+/// length.
 #[derive(WidgetDisplay)]
 pub struct Text<const H: usize> {
+	/// The lines of text.
 	pub content: [String; H],
-	pub align: Align,
-	pub padding: char,
+	/// The width of the text.
 	pub width: usize,
+	/// How is the text aligned if not long enough.
+	pub align: Align,
+	/// Which character is used for padding. Defaults to `' '`
+	pub padding: char,
+}
+
+/// Helper functions to build a [`Text`].
+impl<const H: usize> Text<H> {
+	/// A left-aligned text with `' '` as padding character
+	pub fn new(text: [String; H], width: usize) -> Self {
+		Self { content: text, align: Align::Left, padding: ' ', width }
+	}
+	/// A centered text with `' '` as padding character
+	pub fn centered(text: [String; H], width: usize) -> Self {
+		Self { content: text, align: Align::Center, padding: ' ', width }
+	}
+	/// A right-aligned text with `' '` as padding character
+	pub fn right_aligned(text: [String; H], width: usize) -> Self {
+		Self { content: text, align: Align::Right, padding: ' ', width }
+	}
+	/// Clears the Text's content.
+	pub fn clear(&mut self) {
+		for s in self.content.iter_mut() {
+			s.clear();
+		}
+	}
 }
 
 impl<const H: usize> Widget for Text<H> {
@@ -50,23 +87,6 @@ impl<const H: usize> Widget for Text<H> {
 	}
 }
 
-impl<const H: usize> Text<H> {
-	pub fn new(text: [String; H], width: usize) -> Self {
-		Self { content: text, align: Align::Left, padding: ' ', width }
-	}
-	pub fn centered(text: [String; H], width: usize) -> Self {
-		Self { content: text, align: Align::Center, padding: ' ', width }
-	}
-	pub fn right_aligned(text: [String; H], width: usize) -> Self {
-		Self { content: text, align: Align::Right, padding: ' ', width }
-	}
-	pub fn clear(&mut self) {
-		for s in self.content.iter_mut() {
-			s.clear();
-		}
-	}
-}
-
 impl<const H: usize> Index<usize> for Text<H> {
 	type Output = String;
 	fn index(&self, i: usize) -> &Self::Output {
@@ -76,15 +96,5 @@ impl<const H: usize> Index<usize> for Text<H> {
 impl<const H: usize> IndexMut<usize> for Text<H> {
 	fn index_mut(&mut self, i: usize) -> &mut Self::Output {
 		&mut self.content[i]
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	//use super::*;
-
-	#[test]
-	fn align() {
-		unimplemented!();
 	}
 }

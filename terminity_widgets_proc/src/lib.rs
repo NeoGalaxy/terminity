@@ -2,9 +2,9 @@
 
 /*! Crate defining the procedural macros for [terminity_widgets](#).
 
-This crate defines two macros, [`frame!`] and [`derive(WidgetDisplay)`](widget_display),
-to help you write your apps with terminity's widgets. This is at a very early development stage,
-and breaking changes or new macros (as a StructFrame one) are to be foreseen.
+	This crate defines two macros, [`frame!`] and [`derive(WidgetDisplay)`](widget_display),
+	to help you write your apps with terminity's widgets. This is at a very early development stage,
+	and breaking changes or new macros (as a StructFrame one) are to be foreseen.
 
 */
 
@@ -18,89 +18,99 @@ use quote::quote;
 
 use syn::{parse_macro_input, DeriveInput};
 
-/** Utility macro to build collection frames, aka. Frames.
-
-The internal representation and the constructor of Frame may be a bit opaque. This macro
-aims to create a frame in a very visual and explicit way. There are currently two syntaxes.
-The move syntax allows to wrap any collection into a frame (like a HashMap for instance),
-while the array syntax allows to be a tiny bit more explicit on which widget goes where.
-
-# The Move syntax
-
-The move syntax is defined as followed (with non-terminals in italic, terminals as code and
-full caps using rust's syntax) :
-
-> *MoveSyntax* : &#9;*collection* `=>` `{` *IndexMap* `}` *FrameContent*
->
-> *collection* : EXPRESSION
->
-> *IndexMap* : (CHAR `:` EXPRESSION`,`)*
->
-> *FrameContent* : STRING_LITERAL*
->
-
-It takes ownership of the expression designated by *collection*, and uses the the *IndexMap*
-to know the index of each widget and to be able to recognise the widgets in the *FrameContent*.
-Any occurrence of a character used in the *IndexMap* will be replaced with the widget at the
-index corresponding to the associated expression. For instance, in the following example, the
-box described with `H`s will be replaced by the lines of `texts[0]`, and the one with `W`s by
-the lines of `texts[1]`. See the doc of [Frame](#) (todo: link) for more details on how to use
-a frame.
-
-Example:
-```
-use terminity_widgets_proc::frame;
-use terminity_widgets::widgets::text::Text;
-let texts = vec![
-Text::new(["Hello".into(), "-----".into()], 5),
-Text::new(["World".into(), "".into()], 5),
-];
-let mut framed_texts = frame!(texts => { 'H': 0, 'W': 1 }
-"*~~~~~~~~~~~~~~*"
-"| HHHHH WWWWW! |"
-"| HHHHH-WWWWW- |"
-"*~~~~~~~~~~~~~~*"
-);
-framed_texts[1][1] = String::from("-----");
-
-println!("{}", framed_texts); // Prints a fancy underlined hello world
-```
-
-# The Array syntax
-
-The array syntax is defined as followed :
-
-> *MoveSyntax* : `[`*IndexedArray*`]` *FrameContent*
->
-> *IndexedArray* : (CHAR `:` EXPRESSION`,`)*
->
-> *FrameContent* : STRING_LITERAL*
->
-
-This creates an array on the fly containing the values of the expressions given in
-*IndexedArray* and makes it into a frame. It then uses the keys of *IndexedArray*
-to know which is the char in the *FrameContent* to replace by the corresponding expression.
-
-Here is an example equivalent to the previous one, using the array syntax:
-```
-use terminity_widgets_proc::frame;
-use terminity_widgets::widgets::text::Text;
-let mut framed_texts = frame!(
-	[
-	'H': Text::new(["Hello".into(), "-----".into()], 5),
-	'W': Text::new(["World".into(), "".into()], 5),
-	]
-	"*~~~~~~~~~~~~~~*"
-	"| HHHHH WWWWW! |"
-	"| HHHHH-WWWWW- |"
-	"*~~~~~~~~~~~~~~*"
-);
-framed_texts[1][1] = String::from("-----");
-
-println!("{}", framed_texts);
-```
-
-*/
+/// Utility macro to build collection frames, aka. Frames.
+///
+/// The internal representation and the constructor of Frame may be a bit opaque. This macro
+/// aims to create a frame in a very visual and explicit way. There are currently two syntaxes.
+/// The move syntax allows to wrap any collection into a frame (like a HashMap for instance),
+/// while the array syntax allows to be a tiny bit more explicit on which widget goes where.
+///
+/// # The Move syntax
+///
+/// TL;DR: check the example.
+///
+/// The move syntax is defined as followed (with non-terminals in italic, terminals as code and
+/// full caps using rust's syntax) :
+///
+/// > *MoveSyntax* : &#9;*collection* `=>` `{` *IndexMap* `}` *FrameContent*
+/// >
+/// > *collection* : EXPRESSION
+/// >
+/// > *IndexMap* : (CHAR `:` EXPRESSION`,`)*
+/// >
+/// > *FrameContent* : STRING_LITERAL*
+/// >
+///
+/// It takes ownership of the expression designated by *collection*, and uses the the *IndexMap*
+/// to know the index of each widget and to be able to recognise the widgets in the *FrameContent*.
+/// Any occurrence of a character used in the *IndexMap* will be replaced with the widget at the
+/// index corresponding to the associated expression. For instance, in the following example, the
+/// box described with `H`s will be replaced by the lines of `texts[0]`, and the one with `W`s by
+/// the lines of `texts[1]`. See the doc of [Frame](#) (todo: link) for more details on how to use
+/// a frame.
+///
+/// Example:
+/// ```
+/// use terminity_widgets_proc::frame;
+/// use terminity_widgets::widgets::text::Text;
+/// let texts = vec![
+/// 	Text::new(["Hello".into(), "-----".into()], 5),
+/// 	Text::new(["World".into(), "".into()], 5),
+/// ];
+/// let mut framed_texts = frame!(texts => { 'H': 0, 'W': 1 }
+/// 	"*~~~~~~~~~~~~~~*"
+/// 	"| HHHHH WWWWW! |"
+/// 	"| HHHHH-WWWWW- |"
+/// 	"*~~~~~~~~~~~~~~*"
+/// );
+/// framed_texts[1][1] = String::from("-----");
+///
+/// println!("{}", framed_texts);
+/// // *~~~~~~~~~~~~~~*
+/// // | Hello World! |
+/// // | ------------ |
+/// // *~~~~~~~~~~~~~~*
+/// ```
+///
+/// # The Array syntax
+///
+/// TL;DR: check the example.
+///
+/// The array syntax is defined as followed :
+///
+/// > *MoveSyntax* : `[`*IndexedArray*`]` *FrameContent*
+/// >
+/// > *IndexedArray* : (CHAR `:` EXPRESSION`,`)*
+/// >
+/// > *FrameContent* : STRING_LITERAL*
+/// >
+///
+/// This creates an array on the fly containing the values of the expressions given in
+/// *IndexedArray* and makes it into a frame. It then uses the keys of *IndexedArray*
+/// to know which is the char in the *FrameContent* to replace by the corresponding expression.
+///
+/// Here is an example equivalent to the previous one, using the array syntax:
+/// ```
+/// use terminity_widgets_proc::frame;
+/// use terminity_widgets::widgets::text::Text;
+/// let mut framed_texts = frame!(
+/// 	[
+/// 		'H': Text::new(["Hello".into(), "-----".into()], 5),
+/// 		'W': Text::new(["World".into(), "".into()], 5),
+/// 	]
+/// 	"*~~~~~~~~~~~~~~*"
+/// 	"| HHHHH WWWWW! |"
+/// 	"| HHHHH-WWWWW- |"
+/// 	"*~~~~~~~~~~~~~~*"
+/// );
+/// framed_texts[1][1] = String::from("-----");
+///
+/// println!("{}", framed_texts);
+/// // *~~~~~~~~~~~~~~*
+/// // | Hello World! |
+/// // | ------------ |
+/// // *~~~~~~~~~~~~~~*
+/// ```
 #[proc_macro_error]
 #[proc_macro]
 pub fn frame(tokens: TokenStream) -> TokenStream {

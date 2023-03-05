@@ -1,4 +1,5 @@
-/// A chess game. Checkmate is not checked yet.
+//! A chess game. Checkmate is not checked yet.
+
 use std::fmt::Write;
 use std::io;
 use std::ops::{Index, IndexMut};
@@ -10,7 +11,7 @@ use crossterm::event::{
 //use crossterm::{Style, Color as TermColor};
 use crossterm::style::{Color as TermColor, ContentStyle};
 use crossterm::{cursor, event, terminal, QueueableCommand};
-use terminity_widgets::widgets::padder::AutoPadder;
+use terminity_widgets::widgets::auto_padder::AutoPadder;
 use terminity_widgets::{MouseEventWidget, ResizableWisget, Widget, WidgetDisplay};
 
 use crate::games::Game;
@@ -323,7 +324,7 @@ impl Default for Board {
 }
 
 impl Widget for Board {
-	fn size(&self) -> Pos {
+	fn size(&self) -> (usize, usize) {
 		(18, 9)
 	}
 	fn displ_line(&self, f: &mut std::fmt::Formatter<'_>, mut line_nb: usize) -> std::fmt::Result {
@@ -390,8 +391,8 @@ impl Widget for Board {
 }
 
 impl MouseEventWidget for Board {
-	type Res = bool;
-	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::Res {
+	type MouseHandlingResult = bool;
+	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult {
 		// NB: the event will be filtered and re-indexed by the wrapping Auto-Padder
 		let MouseEvent { kind, mut column, mut row, .. } = event;
 		column = column / 2;
