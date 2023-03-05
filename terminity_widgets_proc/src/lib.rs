@@ -50,7 +50,7 @@ use syn::{parse_macro_input, DeriveInput};
 /// for more details on how to use a frame.
 ///
 /// Example:
-/// ```ignore
+/// ```
 /// use terminity_widgets_proc::frame;
 /// use terminity_widgets::widgets::text::Text;
 /// let texts = vec![
@@ -90,7 +90,7 @@ use syn::{parse_macro_input, DeriveInput};
 /// to know which is the char in the *FrameContent* to replace by the corresponding expression.
 ///
 /// Here is an example equivalent to the previous one, using the array syntax:
-/// ```ignore
+/// ```
 /// use terminity_widgets_proc::frame;
 /// use terminity_widgets::widgets::text::Text;
 /// let mut framed_texts = frame!(
@@ -129,7 +129,7 @@ pub fn frame(tokens: TokenStream) -> TokenStream {
 /// This might be suspect to change and even removal and replaced by an addition in terminity's api.
 ///
 /// Example:
-/// ```ignore
+/// ```
 /// use terminity_widgets::Widget;
 /// use terminity_widgets_proc::WidgetDisplay;
 /// #[derive(WidgetDisplay)]

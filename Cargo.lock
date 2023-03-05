@@ -467,11 +467,13 @@ dependencies = [
 name = "terminity_widgets_proc"
 version = "0.1.0"
 dependencies = [
+ "crossterm",
  "proc-macro-crate",
  "proc-macro-error",
  "proc-macro2",
  "quote",
  "syn",
+ "terminity_widgets",
 ]
 
 [[package]]
