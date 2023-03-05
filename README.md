@@ -2,7 +2,7 @@
 
 This project's goal is to democratize a bit more the use of terminals, especially for small games.
 
-Example programmed quickly:
+Example with a very small Chess game:
 ![Example of a chess program](terminity_chess.gif)
 
 Terminity sets up an environment for games to run in, and registers multiple games to play.

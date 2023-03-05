@@ -3,13 +3,13 @@ name = "terminity_widgets_proc"
 version = "0.1.0"
 authors = ["Naeio <naeiogalaxy@gmail.com>"]
 edition = "2021"
-description = "Widgets for TUI"
+description = "Proc macros for terminity_widgets"
 readme = "README.md"
 #homepage = 
 repository = "https://github.com/NeoGalaxy/terminity"
 license = "BSD-4-Clause"
 #license-file = "../LICENSE"
-keywords = ["TUI", "UI", "terminal", "game-development"]
+keywords = ["proc-macro", "terminity_widgets"]
 categories = ["game-development", "games"]
 
 [lib]
