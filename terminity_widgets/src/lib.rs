@@ -40,7 +40,7 @@ pub mod _reexport {
 /// Be careful, to avoid breaking this rule all the time, if the content of your widget is not long
 /// enough you should add padding.
 ///
-/// In the current implementation, the support for ANSII sequences is assumed and can thus be used.
+/// In the current implementation, the support for ANSI sequences is assumed and can thus be used.
 ///
 /// NB: A widget's size shouldn't change during its display, as this could have some unpredictable
 /// behavior for the parent. This is usually ensured by the fact that the widget is immutably

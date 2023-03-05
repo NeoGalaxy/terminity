@@ -1,4 +1,7 @@
-/// A "super tic tac toe". TODO: Explan rules
+//! A "super tic tac toe". TODO: Explan rules
+
+#![allow(missing_docs)]
+
 use core::slice;
 use std::fmt::Write as FmtWrite;
 use std::ops::{Index, IndexMut};

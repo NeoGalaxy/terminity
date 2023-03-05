@@ -124,7 +124,7 @@ pub fn frame(tokens: TokenStream) -> TokenStream {
 ///
 /// Due to the way raw mode works and since this derive is mainly to display in console in terminity
 /// (that uses raw mode internally), current implementation actually prints 3 things at each newline.
-/// First, it prints the (ANSII) escape sequence to clear the line, then `"\n\r"`, since raw mode
+/// First, it prints the (ANSI) escape sequence to clear the line, then `"\n\r"`, since raw mode
 /// doesn't automatically make a `\r` on new line.
 /// This might be suspect to change and even removal and replaced by an addition in terminity's api.
 ///

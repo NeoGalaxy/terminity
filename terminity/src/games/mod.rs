@@ -1,3 +1,6 @@
+//! a module defining what is a game and registering all of them. Currently, only a "super tic tac
+//! toe" and a chess implementation that doesn't recognises checkmates are playable.
+
 use crossterm::{
 	event::{
 		DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
@@ -13,17 +16,20 @@ use std::{
 	sync::{Arc, Mutex},
 };
 
-mod chess;
-mod stratego;
-mod sttt;
+pub mod chess;
+pub mod stratego;
+pub mod sttt;
 
+/// A wrapper for any game, that indicate its name.
 pub struct GameWrapper {
+	/// The game itself.
 	game: Box<dyn Game + Send + Sync>,
+	/// The name of the game.
 	pub name: &'static str,
 }
 
 lazy_static! {
-	/// This is an example for using doc comment attributes
+	/// Registers all the playable games and their names.
 	pub static ref REGISTERY: HashMap<&'static str, GameWrapper> = {
 		let mut m = HashMap::new();
 		m.insert("SuperTicTacToe", GameWrapper {
@@ -46,6 +52,7 @@ lazy_static! {
 }
 
 impl GameWrapper {
+	/// Runs the wrapped game.
 	pub fn run(&self) -> std::io::Result<()> {
 		// Set up new hook
 		let old_hook = panic::take_hook();
@@ -62,7 +69,7 @@ impl GameWrapper {
 		});
 		// Prepare game
 		crossterm::terminal::enable_raw_mode()?;
-		execute!(stdout(), EnableBracketedPaste, EnableFocusChange, EnableMouseCapture,)?;
+		execute!(stdout(), EnableBracketedPaste, EnableFocusChange, EnableMouseCapture)?;
 		stdout()
 			.queue(crossterm::cursor::SavePosition)?
 			.queue(crossterm::terminal::EnterAlternateScreen)?
@@ -76,7 +83,7 @@ impl GameWrapper {
 			.queue(crossterm::cursor::RestorePosition)?
 			.queue(crossterm::cursor::Show)?
 			.flush()?;
-		execute!(stdout(), DisableBracketedPaste, DisableFocusChange, DisableMouseCapture,)?;
+		execute!(stdout(), DisableBracketedPaste, DisableFocusChange, DisableMouseCapture)?;
 		crossterm::terminal::disable_raw_mode()?;
 		// Restore panic state and manage any error during game
 		panic::set_hook(old_hook);
@@ -100,6 +107,7 @@ impl Game for () {
 	}
 }
 
+/// Gets the game corresponding to the given name.
 pub fn get(name: &str) -> Option<&'static GameWrapper> {
 	REGISTERY.get(name)
 }

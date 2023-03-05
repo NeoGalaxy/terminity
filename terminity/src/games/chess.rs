@@ -1,4 +1,9 @@
 //! A chess game. Checkmate is not checked yet.
+//!
+//! Lemme know if the chessboard doesn't display as expected on your console and what
+//! is your configuration. It isn't intended for IDE consoles, but might work on them.
+
+#![allow(missing_docs)]
 
 use std::fmt::Write;
 use std::io;

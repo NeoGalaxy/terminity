@@ -1,4 +1,7 @@
-///! Not yet implemented
+//! Not yet implemented
+
+#![allow(missing_docs)]
+
 use std::io::{self, Write};
 
 use super::Game;
