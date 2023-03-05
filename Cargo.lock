@@ -445,6 +445,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+ "terminity_widgets",
 ]
 
 [[package]]

@@ -51,6 +51,15 @@ impl<const H: usize> Widget for Text<H> {
 }
 
 impl<const H: usize> Text<H> {
+	pub fn new(text: [String; H], width: usize) -> Self {
+		Self { content: text, align: Align::Left, padding: ' ', width }
+	}
+	pub fn centered(text: [String; H], width: usize) -> Self {
+		Self { content: text, align: Align::Center, padding: ' ', width }
+	}
+	pub fn right_aligned(text: [String; H], width: usize) -> Self {
+		Self { content: text, align: Align::Right, padding: ' ', width }
+	}
 	pub fn clear(&mut self) {
 		for s in self.content.iter_mut() {
 			s.clear();

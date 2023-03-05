@@ -3,7 +3,7 @@ name = "terminity"
 version = "0.1.0"
 authors = ["Gwennan Eliezer <naeiogalaxy@gmail.com>"]
 edition = "2021"
-default-run = "terminity"
+default-run = "game"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
