@@ -25,3 +25,9 @@ The very long term goals of this project are to to:
 This project is of course not feasible alone. If you want to support this project in any way,
 anyway from being part of the community to be an active developer, please do!! If enough people are
 interested, a Discord and/or a Subreddit are to expect.
+
+Documentations:
+
+ * [terminity](https://docs.rs/terminity/0.1.0/terminity/)
+ * [terminity_widgets](https://docs.rs/terminity_widgets/0.1.0/terminity_widgets/)
+ * [terminity_widgets_proc](https://docs.rs/terminity_widgets_proc/0.1.0/terminity_widgets_proc/)
