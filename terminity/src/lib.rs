@@ -1,5 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
+#![warn(missing_docs)]
 
 pub mod games;
-//pub mod utils;
