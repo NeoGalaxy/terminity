@@ -18,7 +18,7 @@ default-run = "game"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-terminity_widgets = { version = "*", path = "../terminity_widgets" }
+terminity_widgets = { version = "0.1", path = "../terminity_widgets" }
 crossterm = { version = "0.26", features = ["event-stream"] }
 rand = "*"
 structopt = "0.3"

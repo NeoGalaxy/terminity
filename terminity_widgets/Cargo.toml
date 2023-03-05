@@ -16,7 +16,7 @@ categories = ["game-development", "games"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-terminity_widgets_proc = { version = "*", path = "../terminity_widgets_proc" }
+terminity_widgets_proc = { version = "0.1", path = "../terminity_widgets_proc" }
 unicode-segmentation = "1.10"
 strip-ansi-escapes = "0.1"
 crossterm = "0.26"

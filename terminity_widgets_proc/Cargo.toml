@@ -25,4 +25,4 @@ proc-macro2 = "1.0"
 
 #[dev-dependencies]
 #crossterm = "0.26"
-#terminity_widgets = "0.1"
+#terminity_widgets = { version = "0.1", path = "../terminity_widgets" }
