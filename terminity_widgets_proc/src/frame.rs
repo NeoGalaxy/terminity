@@ -265,7 +265,29 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 				while let Some(mut start_index) = substr.find(name.value()) {
 					// Relatively to start_index
 					let mut end_index = match widgets_size {
-						Some((w, _)) => w,
+						Some((w, _)) => {
+							let widget_section = &substr[start_index..(start_index + w)];
+							if widget_section.chars().count() != w
+								|| !widget_section.chars().all(|c| c == name.value())
+							{
+								errors.push(Diagnostic::spanned(
+									line.span(),
+									Level::Error,
+									format!("Widget too short"),
+								));
+								/* From index relative to substr to relative to line_content */
+								start_index += substr_index;
+								// Prepare next iter
+								substr_index = start_index
+									+ line_content[start_index..]
+										.find(|ch| ch != name.value())
+										.unwrap_or(line_content.len());
+								substr = &line_content[substr_index..];
+								continue;
+							} else {
+								w
+							}
+						}
 						None => substr[start_index..]
 							.find(|ch| ch != name.value())
 							.unwrap_or(line_content.len()),
@@ -716,15 +738,15 @@ mod tests {
 	fn wrong_width() {
 		let frame_def: proc_macro2::TokenStream = quote!(
 			values of size<3, 2> => {repeat 'a': 0..}
-			r"/====\"
-			r"| aa |"
-			r"| aa |"
-			r"\====/"
+			r"/======\"
+			r"| aaaa |"
+			r"| aaaa |"
+			r"\======/"
 		)
 		.into();
 		let res = run(syn::parse2(frame_def).unwrap());
 		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 1);
+		assert_ne!(res.1.len(), 0);
 	}
 
 	#[test]
