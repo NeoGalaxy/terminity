@@ -114,7 +114,11 @@ use syn::{parse_macro_input, DeriveInput};
 #[proc_macro_error]
 #[proc_macro]
 pub fn frame(tokens: TokenStream) -> TokenStream {
-	proc_macro::TokenStream::from(frame::run(parse_macro_input!(tokens as frame::FrameMacro)))
+	let (tokens, errors) = frame::run(parse_macro_input!(tokens as frame::FrameMacro));
+	for e in errors {
+		e.emit();
+	}
+	proc_macro::TokenStream::from(tokens)
 }
 
 /// Derive macro to automatically implement [`Display`](std::fmt::Display) on widgets.

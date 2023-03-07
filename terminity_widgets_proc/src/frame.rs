@@ -1,14 +1,14 @@
 use proc_macro2::TokenStream;
-use proc_macro_error::emit_error;
+use proc_macro_error::{Diagnostic, Level};
 use quote::quote;
-use std::{cmp::Ordering, iter};
+use std::{cell::Cell, cmp::Ordering, iter};
 use syn::{
 	braced, bracketed,
 	parse::{Parse, ParseStream},
 	parse_quote,
 	punctuated::{Pair, Punctuated},
 	token::{self, Brace, Bracket},
-	Expr, LitChar, LitStr, Token,
+	Expr, Ident, LitChar, LitInt, LitStr, Token,
 };
 
 #[allow(dead_code)]
@@ -18,11 +18,27 @@ struct FrameWidget {
 	expr: Expr,
 }
 
-#[allow(dead_code)]
+/*#[allow(dead_code)]
 struct FrameWidgetIndex {
 	name: LitChar,
 	col: Token![:],
 	index: Expr,
+}*/
+#[allow(dead_code)]
+enum FrameWidgetIndex {
+	Simple {
+		name: LitChar,
+		col: Token![:],
+		index: Expr,
+	},
+	Repeat {
+		name: LitChar,
+		col: Token![:],
+		start: usize,
+		range: Token![..],
+		end: Option<LitInt>,
+		current: Cell<usize>,
+	},
 }
 
 #[allow(dead_code)]
@@ -33,25 +49,66 @@ enum FrameColl {
 	},
 	External {
 		value: Expr,
+		size: Option<(usize, usize)>,
 		arrow: Token![=>],
 		braces: Brace,
 		values: Punctuated<FrameWidgetIndex, Token![,]>,
 	},
 }
+enum IndexKind<'a> {
+	Expr(Expr),
+	Range((usize, Option<LitInt>, &'a Cell<usize>)),
+}
 
 impl FrameColl {
-	fn widgets_names<'a>(&'a self) -> Box<dyn Iterator<Item = (&'a LitChar, Expr)> + 'a> {
+	fn widgets_names<'a>(&'a self) -> Box<dyn Iterator<Item = (&'a LitChar, IndexKind<'a>)> + 'a> {
 		match self {
 			Self::Array { values, .. } => Box::new(
 				values
 					.iter()
 					.enumerate()
-					.map(|(i, w)| (&w.name, parse_quote!(#i))),
+					.map(|(i, w)| (&w.name, IndexKind::Expr(parse_quote!(#i)))),
 			),
+			Self::External { values, .. } => Box::new(values.iter().map(|w| match w {
+				FrameWidgetIndex::Simple { name, index, .. } => {
+					(name, IndexKind::Expr(index.clone()))
+				}
+				FrameWidgetIndex::Repeat { name, start, end, current, .. } => {
+					(name, IndexKind::Range((*start, end.clone(), current)))
+				}
+			})),
+		}
+	}
+
+	#[must_use]
+	fn check_repeat(&self) -> Vec<Diagnostic> {
+		let mut diag = vec![];
+		match self {
+			Self::Array { .. } => (),
 			Self::External { values, .. } => {
-				Box::new(values.iter().map(|w| (&w.name, w.index.clone())))
+				for w_i in values {
+					match w_i {
+						FrameWidgetIndex::Simple { .. } => continue,
+						FrameWidgetIndex::Repeat { end, current, .. } => {
+							if let Some(end) = end {
+								if current.get() < end.base10_parse().unwrap() {
+									let d =
+										Diagnostic::spanned(
+											end.span(),
+											Level::Error,
+											format!(
+												"Error: Upper bound of {} hasn't been reached (got {})",
+												end, current.get()),
+										);
+									diag.push(d);
+								}
+							}
+						}
+					}
+				}
 			}
 		}
+		diag
 	}
 }
 
@@ -72,10 +129,24 @@ impl Parse for FrameWidget {
 
 impl Parse for FrameWidgetIndex {
 	fn parse(input: ParseStream) -> syn::Result<Self> {
-		let name = input.parse()?;
-		let col = input.parse()?;
-		let index = input.parse()?;
-		Ok(Self { index, col, name })
+		if input.peek(Ident) {
+			let repeat: Ident = input.parse()?;
+			if repeat.to_string() != "repeat" {
+				return Err(syn::Error::new(repeat.span(), "Expected a char or 'repreat'"));
+			}
+			let name = input.parse()?;
+			let col = input.parse()?;
+			let start: LitInt = input.parse()?;
+			let range = input.parse()?;
+			let end: Option<LitInt> = input.parse()?;
+			let start = start.base10_parse()?;
+			Ok(Self::Repeat { name, col, start, range, end, current: Cell::new(start) })
+		} else {
+			let name = input.parse()?;
+			let col = input.parse()?;
+			let index = input.parse()?;
+			Ok(Self::Simple { index, col, name })
+		}
 	}
 }
 
@@ -86,45 +157,62 @@ impl Parse for FrameMacro {
 			let brackets = bracketed!(widgets in input);
 			let values = widgets.parse_terminated(FrameWidget::parse)?;
 			let content: Vec<_> = iter::repeat(())
-				.map_while(|()| {
-					if input.is_empty() {
-						None
-					} else {
-						Some(input.parse())
-					}
-				})
+				.map_while(|()| if input.is_empty() { None } else { Some(input.parse()) })
 				.collect::<syn::Result<_>>()?;
-			Ok(Self {
-				collection: FrameColl::Array { brackets, values },
-				content,
-			})
+			Ok(Self { collection: FrameColl::Array { brackets, values }, content })
 		} else {
 			let indexes;
+			let value = input.parse()?;
+			let size = if input.peek(Ident) {
+				let of: Ident = input.parse()?;
+				if of.to_string() != "of" {
+					return Err(syn::Error::new(
+						of.span(),
+						"Expecting a size description ('of size<w, h>') or the token '=>'",
+					));
+				}
+				let size: Ident = input.parse()?;
+				if size.to_string() != "size" {
+					return Err(syn::Error::new(
+						size.span(),
+						"Expecting a size description ('of size<w, h>')",
+					));
+				}
+				let _: Token![<] = input.parse()?;
+				let left: LitInt = input.parse()?;
+				let _: Token![,] = input.parse()?;
+				let right: LitInt = input.parse()?;
+				let _: Token![>] = input.parse()?;
+				Some((left.base10_parse()?, right.base10_parse()?))
+			} else {
+				None
+			};
 			Ok(Self {
 				collection: FrameColl::External {
-					value: input.parse()?,
+					value,
+					size,
 					arrow: input.parse()?,
 					braces: braced!(indexes in input),
 					values: indexes.parse_terminated(FrameWidgetIndex::parse)?,
 				},
 				content: iter::repeat(())
-					.map_while(|()| {
-						if input.is_empty() {
-							None
-						} else {
-							Some(input.parse())
-						}
-					})
+					.map_while(|()| if input.is_empty() { None } else { Some(input.parse()) })
 					.collect::<syn::Result<_>>()?,
 			})
 		}
 	}
 }
 
-pub fn run(input: FrameMacro) -> TokenStream {
+pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 	let mut frame_width = None;
+	let mut errors = vec![];
 	//let mut content_width = None;
 	//let mut content_height = None;
+
+	let widgets_size = match input.collection {
+		FrameColl::Array { .. } => None,
+		FrameColl::External { size, .. } => size,
+	};
 
 	let widgets = match &input.collection {
 		FrameColl::Array { values, .. } => {
@@ -148,17 +236,20 @@ pub fn run(input: FrameMacro) -> TokenStream {
 
 	let mut last_indexes: Vec<((&LitChar, Expr), (usize, usize), usize)> = vec![];
 	//let mut last_line = None;
-	for line in input.content {
+	for line in &input.content {
 		let line_content = line.value();
 		match frame_width {
 			Some(w) => {
 				if w != line_content.chars().count() {
-					emit_error!(
+					errors.push(Diagnostic::spanned(
 						line.span(),
-						"Frame width is incoherent. Got {} earlier, found {} here.",
-						w,
-						line_content.chars().count()
-					)
+						Level::Error,
+						format!(
+							"Frame width is inconsistant. Got {} earlier, found {} here.",
+							w,
+							line_content.chars().count()
+						),
+					));
 				}
 			} // TODO: check width in graphemes
 			None => frame_width = Some(line_content.chars().count()),
@@ -167,23 +258,20 @@ pub fn run(input: FrameMacro) -> TokenStream {
 			.collection
 			.widgets_names()
 			.flat_map(|(name, index)| {
-				let mut res = vec![];
+				let index = &index;
+				let mut res: Vec<((&LitChar, Expr), (usize, usize), usize)> = vec![];
 				let mut substr = &line_content[..];
 				let mut substr_index = 0;
 				while let Some(mut start_index) = substr.find(name.value()) {
-					let mut end_index = substr[start_index..]
-						.find(|ch| ch != name.value())
-						.unwrap_or(line_content.len());
+					// Relatively to start_index
+					let mut end_index = match widgets_size {
+						Some((w, _)) => w,
+						None => substr[start_index..]
+							.find(|ch| ch != name.value())
+							.unwrap_or(line_content.len()),
+					};
+					// Relatively to substr
 					end_index += start_index;
-					//let len = end_index - start_index;
-					/*match content_width {
-						None => content_width = Some(len),
-						Some(cw) => if cw != len {
-							emit_error!(line.span(),
-								"Content widget width is incoherent. Got {} earlier, found {} here.",
-								cw, len)
-						}
-					}*/
 
 					// From substr index to line_content index
 					start_index += substr_index;
@@ -204,23 +292,48 @@ pub fn run(input: FrameMacro) -> TokenStream {
 						})
 						.ok()
 						.map(|v| &last_indexes[v]);
-					let height: usize = match above {
-						None => 0,
-						Some(((last_name, _), (start, end), y_index)) => {
-							if last_name.value() != name.value()
+					let (height, widget_index) = match above {
+						None => (0, None),
+						Some(((last_name, w_i), (start, end), y_index)) => {
+							if widgets_size.map_or(false, |(_, h)| h == y_index + 1)
+								|| last_name.value() != name.value()
 								|| *start != start_index || *end != end_index
 							{
-								0
+								(0, None)
 							} else {
-								y_index + 1
+								(y_index + 1, Some(w_i.clone()))
 							}
 						}
 					};
+					let widget_index = widget_index.unwrap_or_else(|| match index {
+						IndexKind::Expr(e) => e.clone(),
+						IndexKind::Range((_, end, current)) => {
+							let i = current.get();
+							if let Some(end) = end {
+								let end_val = end.base10_parse().expect("TODO: better error");
+								if i == end_val {
+									let d = Diagnostic::spanned(
+										end.span(),
+										Level::Error,
+										format!("Upper bound of {:?} repetition exceeded", end_val),
+									);
+									errors.push(d);
+									//d.emit();
+									/*emit_error!(
+										end.span(),
+										"Upper bound on the number of repetition exceeded"
+									);*/
+								}
+							}
+							current.set(i + 1);
+							parse_quote!(#i)
+						}
+					});
 
 					// Prepare next iteration
 					substr_index = end_index;
 					substr = &line_content[substr_index..];
-					res.push(((name, index.clone()), (start_index, end_index), height));
+					res.push(((name, widget_index), (start_index, end_index), height));
 				}
 				res
 			})
@@ -255,13 +368,38 @@ pub fn run(input: FrameMacro) -> TokenStream {
 	}
 	// TODO: check height of last_indexes
 	//let _ = check_heights(&last_indexes, &[], &mut content_height, &last_line.unwrap());
+	match widgets_size {
+		None => (),
+		Some(s) => {
+			for i in last_indexes {
+				if i.2 + 1 != s.1 {
+					errors.push(Diagnostic::spanned(
+						input.content.last().unwrap().span(),
+						Level::Error,
+						format!(
+							"Lines of {:?} missing (at {} out of {})",
+							i.0 .0.value(),
+							i.2,
+							s.1
+						),
+					))
+				}
+			}
+		}
+	}
 
-	quote!({
-		let widgets = #widgets;
-		terminity_widgets::widgets::frame::Frame::new(
-			vec![#frame_lines], widgets
-		)
-	})
+	// Check number of repetition of Repeat indexes
+	errors.append(&mut input.collection.check_repeat());
+
+	(
+		quote!({
+			let widgets = #widgets;
+			terminity_widgets::widgets::frame::Frame::new(
+				vec![#frame_lines], widgets
+			)
+		}),
+		errors,
+	)
 }
 
 #[cfg(test)]
@@ -304,7 +442,9 @@ mod tests {
 				widgets
 			)
 		});
-		assert_eq!(res.to_string(), expected.to_string());
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 0);
+		assert_eq!(res.0.to_string(), expected.to_string());
 	}
 
 	#[test]
@@ -377,6 +517,297 @@ mod tests {
 				widgets
 			)
 		});
-		assert_eq!(res.to_string(), expected.to_string());
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 0);
+		assert_eq!(res.0.to_string(), expected.to_string());
+	}
+
+	#[test]
+	fn repeat_one_frame() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values => {repeat 'a': 0..4}
+			r"/=============\"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"*=============*"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"\=============/"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		#[rustfmt::skip]
+		let expected: proc_macro2::TokenStream = quote!({
+			let widgets = values;
+			terminity_widgets::widgets::frame::Frame::new(
+				vec![
+					("/=============\\".to_owned(), vec![]),
+					(
+						"| ".to_owned(),
+						vec![
+							((0usize, 0usize), " ".to_owned()),
+							((1usize, 0usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((0usize, 1usize), " ".to_owned()),
+							((1usize, 1usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((0usize, 2usize), " ".to_owned()),
+							((1usize, 2usize), " |".to_owned())
+						]
+					),
+					("*=============*".to_owned(), vec![]),
+					(
+						"| ".to_owned(),
+						vec![
+							((2usize, 0usize), " ".to_owned()),
+							((3usize, 0usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((2usize, 1usize), " ".to_owned()),
+							((3usize, 1usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((2usize, 2usize), " ".to_owned()),
+							((3usize, 2usize), " |".to_owned())
+						]
+					),
+					("\\=============/".to_owned(), vec![])
+				],
+				widgets
+			)
+		});
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 0);
+		assert_eq!(res.0.to_string(), expected.to_string());
+	}
+
+	#[test]
+	fn repeat_one_frame_noend() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values => {repeat 'a': 0..}
+			r"/=============\"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"*=============*"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"\=============/"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		#[rustfmt::skip]
+		let expected: proc_macro2::TokenStream = quote!({
+			let widgets = values;
+			terminity_widgets::widgets::frame::Frame::new(
+				vec![
+					("/=============\\".to_owned(), vec![]),
+					(
+						"| ".to_owned(),
+						vec![
+							((0usize, 0usize), " ".to_owned()),
+							((1usize, 0usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((0usize, 1usize), " ".to_owned()),
+							((1usize, 1usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((0usize, 2usize), " ".to_owned()),
+							((1usize, 2usize), " |".to_owned())
+						]
+					),
+					("*=============*".to_owned(), vec![]),
+					(
+						"| ".to_owned(),
+						vec![
+							((2usize, 0usize), " ".to_owned()),
+							((3usize, 0usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((2usize, 1usize), " ".to_owned()),
+							((3usize, 1usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((2usize, 2usize), " ".to_owned()),
+							((3usize, 2usize), " |".to_owned())
+						]
+					),
+					("\\=============/".to_owned(), vec![])
+				],
+				widgets
+			)
+		});
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 0);
+		assert_eq!(res.0.to_string(), expected.to_string());
+	}
+
+	#[test]
+	fn repeat_not_enough() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values => {repeat 'a': 0..5}
+			r"/=============\"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"*=============*"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"\=============/"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 1);
+	}
+
+	#[test]
+	fn repeat_too_much() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values => {repeat 'a': 0..3}
+			r"/=============\"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"*=============*"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"| aaaaa aaaaa |"
+			r"\=============/"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 1);
+	}
+
+	#[test]
+	fn wrong_width() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values of size<3, 2> => {repeat 'a': 0..}
+			r"/====\"
+			r"| aa |"
+			r"| aa |"
+			r"\====/"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 1);
+	}
+
+	#[test]
+	fn wrong_height() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values of size<2, 3> => {repeat 'a': 0..}
+			r"/====\"
+			r"| aa |"
+			r"| aa |"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 1);
+	}
+
+	#[test]
+	fn wrong_height2() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values of size<2, 3> => {repeat 'a': 0..}
+			r"/====\"
+			r"| aa |"
+			r"| aa |"
+			r"\====/"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 1);
+	}
+
+	#[test]
+	fn repeat_frame() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values of size<1, 1> => {repeat 'x': 0..12}
+			r"/======\"
+			r"| xxxx |"
+			r"| xxxx |"
+			r"| xxxx |"
+			r"\======/"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		#[rustfmt::skip]
+		let expected: proc_macro2::TokenStream = quote!({
+			let widgets = values;
+			terminity_widgets::widgets::frame::Frame::new(
+				vec![
+					("/======\\".to_owned(), vec![]),
+					(
+						"| ".to_owned(),
+						vec![
+							((0usize, 0usize), "".to_owned()),
+							((1usize, 0usize), "".to_owned()),
+							((2usize, 0usize), "".to_owned()),
+							((3usize, 0usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((4usize, 0usize), "".to_owned()),
+							((5usize, 0usize), "".to_owned()),
+							((6usize, 0usize), "".to_owned()),
+							((7usize, 0usize), " |".to_owned())
+						]
+					),
+					(
+						"| ".to_owned(),
+						vec![
+							((8usize, 0usize), "".to_owned()),
+							((9usize, 0usize), "".to_owned()),
+							((10usize, 0usize), "".to_owned()),
+							((11usize, 0usize), " |".to_owned())
+						]
+					),
+					("\\======/".to_owned(), vec![])
+				],
+				widgets
+			)
+		});
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 0);
+		assert_eq!(res.0.to_string(), expected.to_string());
 	}
 }
