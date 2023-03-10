@@ -1,7 +1,12 @@
 use proc_macro2::TokenStream;
 use proc_macro_error::{Diagnostic, Level};
 use quote::quote;
-use std::{cell::Cell, cmp::Ordering, iter};
+use std::{
+	cell::{Cell, RefCell},
+	cmp::Ordering,
+	collections::HashMap,
+	iter,
+};
 use syn::{
 	braced, bracketed,
 	parse::{Parse, ParseStream},
@@ -55,7 +60,7 @@ enum FrameColl {
 		values: Punctuated<FrameWidgetIndex, Token![,]>,
 	},
 }
-enum IndexKind<'a> {
+pub enum IndexKind<'a> {
 	Expr(Expr),
 	Range((usize, Option<LitInt>, &'a Cell<usize>)),
 }
@@ -203,16 +208,188 @@ impl Parse for FrameMacro {
 	}
 }
 
+pub fn parse_frame_lines<'a>(
+	frame_width: &mut Option<usize>,
+	errors: &mut Vec<Diagnostic>,
+	content: &[LitStr],
+	widgets_names: Vec<(char, &RefCell<Option<(usize, usize)>>)>,
+) -> Vec<(LitStr, Vec<(((char, usize), usize), LitStr)>)> {
+	let mut res_lines = vec![];
+
+	let mut next_uid = 0;
+	// char to match, uid, start, end, current line
+	let mut last_indexes: Vec<(char, usize, (usize, usize), usize)> = vec![];
+	for line in content {
+		let line_content = line.value();
+		// Check full width of frame
+		match frame_width {
+			Some(w) => {
+				if *w != line_content.chars().count() {
+					errors.push(Diagnostic::spanned(
+						line.span(),
+						Level::Error,
+						format!(
+							"Frame width is inconsistant. Got {} earlier, found {} here.",
+							w,
+							line_content.chars().count()
+						),
+					));
+				}
+			} // TODO: check width in graphemes
+			None => *frame_width = Some(line_content.chars().count()),
+		}
+		// Get the list of index of widget on current line
+		let mut indexes = widgets_names
+			.iter()
+			.flat_map(|(name, widgets_size)| {
+				let name = *name;
+				// List of all the places in the string where there is the widget of char `name`
+				let mut res: Vec<(char, usize, (usize, usize), usize)> = vec![];
+				// Substring that hasn't been checked yet
+				let mut substr = &line_content[..];
+				// The index at which the above substring starts in `line_content`
+				let mut substr_index = 0;
+
+				// Find next occurence of the char to match
+				while let Some(mut start_index) = substr.find(name) {
+					// getting `end_index` relatively to `start_index`
+					let mut end_index = match *widgets_size.borrow_mut() {
+						// If current widget has pre-defined width, then use it
+						Some((w, _)) => {
+							let widget_section = &substr[start_index..(start_index + w)];
+							if widget_section.chars().count() != w
+								|| !widget_section.chars().all(|c| c == name)
+							{
+								// Create error and skip until a char is different
+								errors.push(Diagnostic::spanned(
+									line.span(),
+									Level::Error,
+									format!("Widget of character {} too short", name),
+								));
+								// Relatively to line_content
+								start_index += substr_index;
+								// Prepare next iter
+								substr_index = start_index
+									+ line_content[start_index..]
+										.find(|ch| ch != name)
+										.unwrap_or(line_content.len());
+								substr = &line_content[substr_index..];
+								continue;
+							} else {
+								w
+							}
+						}
+						None => substr[start_index..]
+							.find(|ch| ch != name)
+							.unwrap_or(line_content.len()),
+					};
+					// Relatively to substr
+					end_index += start_index;
+
+					// Relatively to line_content
+					start_index += substr_index;
+					end_index += substr_index;
+
+					// Get details of this same span on the line above
+					let above = last_indexes
+						.binary_search_by(|(_, _, (start, end), _)| {
+							if (start_index..end_index).contains(start)
+								|| (start_index..end_index).contains(end)
+								|| (*start..*end).contains(&start_index)
+								|| (*start..*end).contains(&end_index)
+							{
+								Ordering::Equal
+							} else {
+								start.cmp(&start_index)
+							}
+						})
+						.ok()
+						.map(|v| &last_indexes[v]);
+					// Check if the line above matches and generate the accurate vertical index.
+					let (widget_y_index, uid) = match above {
+						None => {
+							next_uid += 1;
+							(0, next_uid - 1)
+						}
+						Some((last_name, last_uid, (start, end), y_index)) => {
+							// if there's some kind of issue, then we start a brand new display
+							if widgets_size.borrow().map_or(false, |(_, h)| h == y_index + 1)
+								|| *last_name != name || *start != start_index
+								|| *end != end_index
+							{
+								next_uid += 1;
+								(0, next_uid - 1)
+							} else {
+								(y_index + 1, *last_uid)
+							}
+						}
+					};
+
+					// Prepare next iteration
+					substr_index = end_index;
+					substr = &line_content[substr_index..];
+					res.push((name, uid, (start_index, end_index), widget_y_index));
+				}
+				res
+			})
+			.collect::<Vec<_>>();
+		indexes.sort_unstable_by_key(|(_, _, i, _)| *i);
+
+		//let _ = check_heights(&last_indexes, &indexes, &mut content_height, &last_line.unwrap());
+
+		// Make (widget, suffix) pairs from the end of the line
+		let mut last_index = line_content.len();
+		let mut line_res = vec![];
+		for (widget, uid, (line_index, line_end), line_height) in indexes.iter().rev() {
+			//let width = content_width.unwrap();
+			line_res.push((
+				((widget.clone(), *uid), line_height.clone()),
+				LitStr::new(&line_content[*line_end..last_index], line.span()),
+			));
+			last_index = *line_index;
+		}
+		// Reorder line to have it in appropriate order
+		line_res.reverse();
+
+		res_lines.push((LitStr::new(&line_content[0..last_index], line.span()), line_res));
+
+		// Prepare next iteration
+		last_indexes = indexes;
+		//last_line = Some(line);
+	}
+	// TODO: check height of last_indexes
+	//let _ = check_heights(&last_indexes, &[], &mut content_height, &last_line.unwrap());
+	/*match widgets_size {
+		None => (),
+		Some(s) => {
+			for i in last_indexes {
+				if i.2 + 1 != s.1 {
+					errors.push(Diagnostic::spanned(
+						content.last().unwrap().span(),
+						Level::Error,
+						format!(
+							"Lines of {:?} missing (at {} out of {})",
+							i.0 .0.value(),
+							i.2,
+							s.1
+						),
+					))
+				}
+			}
+		}
+	}*/
+	res_lines
+}
+
 pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
-	let mut frame_width = None;
 	let mut errors = vec![];
 	//let mut content_width = None;
 	//let mut content_height = None;
 
-	let widgets_size = match input.collection {
+	let widgets_size = RefCell::new(match input.collection {
 		FrameColl::Array { .. } => None,
 		FrameColl::External { size, .. } => size,
-	};
+	});
 
 	let widgets = match &input.collection {
 		FrameColl::Array { values, .. } => {
@@ -232,102 +409,27 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 		}
 	};
 
+	let widgets_indexes: HashMap<_, _> =
+		input.collection.widgets_names().map(|wi_data| (wi_data.0.value(), wi_data)).collect();
+
+	let mut frame_width = None;
+	let frame_layout = parse_frame_lines(
+		&mut frame_width,
+		&mut errors,
+		&input.content,
+		widgets_indexes.keys().map(|k| (*k, &widgets_size)).collect(),
+	);
+
 	let mut frame_lines: Punctuated<_, Token![,]> = Punctuated::new();
 
-	let mut last_indexes: Vec<((&LitChar, Expr), (usize, usize), usize)> = vec![];
-	//let mut last_line = None;
-	for line in &input.content {
-		let line_content = line.value();
-		match frame_width {
-			Some(w) => {
-				if w != line_content.chars().count() {
-					errors.push(Diagnostic::spanned(
-						line.span(),
-						Level::Error,
-						format!(
-							"Frame width is inconsistant. Got {} earlier, found {} here.",
-							w,
-							line_content.chars().count()
-						),
-					));
-				}
-			} // TODO: check width in graphemes
-			None => frame_width = Some(line_content.chars().count()),
-		}
-		let mut indexes = input
-			.collection
-			.widgets_names()
-			.flat_map(|(name, index)| {
-				let index = &index;
-				let mut res: Vec<((&LitChar, Expr), (usize, usize), usize)> = vec![];
-				let mut substr = &line_content[..];
-				let mut substr_index = 0;
-				while let Some(mut start_index) = substr.find(name.value()) {
-					// Relatively to start_index
-					let mut end_index = match widgets_size {
-						Some((w, _)) => {
-							let widget_section = &substr[start_index..(start_index + w)];
-							if widget_section.chars().count() != w
-								|| !widget_section.chars().all(|c| c == name.value())
-							{
-								errors.push(Diagnostic::spanned(
-									line.span(),
-									Level::Error,
-									format!("Widget too short"),
-								));
-								/* From index relative to substr to relative to line_content */
-								start_index += substr_index;
-								// Prepare next iter
-								substr_index = start_index
-									+ line_content[start_index..]
-										.find(|ch| ch != name.value())
-										.unwrap_or(line_content.len());
-								substr = &line_content[substr_index..];
-								continue;
-							} else {
-								w
-							}
-						}
-						None => substr[start_index..]
-							.find(|ch| ch != name.value())
-							.unwrap_or(line_content.len()),
-					};
-					// Relatively to substr
-					end_index += start_index;
-
-					// From substr index to line_content index
-					start_index += substr_index;
-					end_index += substr_index;
-
-					// Get line index
-					let above = last_indexes
-						.binary_search_by(|(_, (start, end), _)| {
-							if (start_index..end_index).contains(start)
-								|| (start_index..end_index).contains(end)
-								|| (*start..*end).contains(&start_index)
-								|| (*start..*end).contains(&end_index)
-							{
-								Ordering::Equal
-							} else {
-								start.cmp(&start_index)
-							}
-						})
-						.ok()
-						.map(|v| &last_indexes[v]);
-					let (height, widget_index) = match above {
-						None => (0, None),
-						Some(((last_name, w_i), (start, end), y_index)) => {
-							if widgets_size.map_or(false, |(_, h)| h == y_index + 1)
-								|| last_name.value() != name.value()
-								|| *start != start_index || *end != end_index
-							{
-								(0, None)
-							} else {
-								(y_index + 1, Some(w_i.clone()))
-							}
-						}
-					};
-					let widget_index = widget_index.unwrap_or_else(|| match index {
+	let mut uid_indexes: HashMap<usize, Expr> = HashMap::new();
+	for (prefix, line_details) in frame_layout.into_iter() {
+		let line_res = line_details.into_iter().map(|(((name, uid), line_i), suffix)| {
+			let index_expr = match uid_indexes.get(&uid) {
+				Some(i) => i.clone(),
+				None => {
+					let (_, index) = &widgets_indexes[&name];
+					match index {
 						IndexKind::Expr(e) => e.clone(),
 						IndexKind::Range((_, end, current)) => {
 							let i = current.get();
@@ -348,66 +450,16 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 								}
 							}
 							current.set(i + 1);
-							parse_quote!(#i)
+							let res: Expr = parse_quote!(#i);
+							let _ = uid_indexes.insert(uid, res.clone());
+							res
 						}
-					});
-
-					// Prepare next iteration
-					substr_index = end_index;
-					substr = &line_content[substr_index..];
-					res.push(((name, widget_index), (start_index, end_index), height));
+					}
 				}
-				res
-			})
-			.collect::<Vec<_>>();
-		indexes.sort_unstable_by_key(|(_, i, _)| *i);
-
-		//let _ = check_heights(&last_indexes, &indexes, &mut content_height, &last_line.unwrap());
-
-		// Make (widget, suffix) pairs from the end of the line
-		let mut last_index = line_content.len();
-		let mut line_res = vec![];
-		for (widget, (line_index, line_end), line_height) in indexes.iter().rev() {
-			//let width = content_width.unwrap();
-			line_res.push(((widget, line_height), &line_content[*line_end..last_index]));
-			last_index = *line_index;
-		}
-		// Reorder line
-		line_res.reverse();
-
-		let result_line: Punctuated<_, Token![,]> = line_res
-			.into_iter()
-			.map(|(((_, index), i), suffix)| quote!(((#index, #i), #suffix.to_owned())))
-			.collect();
-
-		// Add Frame argument
-		let prefix = &line_content[0..last_index];
-		frame_lines.push(quote!((#prefix.to_owned(), vec![#result_line])));
-
-		// Prepare next iteration
-		last_indexes = indexes;
-		//last_line = Some(line);
-	}
-	// TODO: check height of last_indexes
-	//let _ = check_heights(&last_indexes, &[], &mut content_height, &last_line.unwrap());
-	match widgets_size {
-		None => (),
-		Some(s) => {
-			for i in last_indexes {
-				if i.2 + 1 != s.1 {
-					errors.push(Diagnostic::spanned(
-						input.content.last().unwrap().span(),
-						Level::Error,
-						format!(
-							"Lines of {:?} missing (at {} out of {})",
-							i.0 .0.value(),
-							i.2,
-							s.1
-						),
-					))
-				}
-			}
-		}
+			};
+			quote!(((#index_expr, #line_i), #suffix.to_owned()))
+		});
+		frame_lines.push(quote!((#prefix.to_owned(), vec![#(#line_res),*])));
 	}
 
 	// Check number of repetition of Repeat indexes
@@ -417,7 +469,7 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 		quote!({
 			let widgets = #widgets;
 			terminity_widgets::widgets::frame::Frame::new(
-				vec![#frame_lines], widgets
+				  vec![#frame_lines], widgets
 			)
 		}),
 		errors,

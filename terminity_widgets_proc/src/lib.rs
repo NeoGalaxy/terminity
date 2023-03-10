@@ -11,11 +11,23 @@
 
 mod frame;
 
+use std::{cell::RefCell, collections::HashMap};
+
 use proc_macro::TokenStream;
-use proc_macro_error::proc_macro_error;
+use proc_macro2::Span;
+use proc_macro_error::{abort, emit_call_site_error, emit_error, proc_macro_error};
 use quote::quote;
 
-use syn::{parse_macro_input, DeriveInput};
+use syn::{
+	braced,
+	parse::{Nothing, Parse, ParseStream},
+	parse2, parse_macro_input,
+	punctuated::Punctuated,
+	spanned::Spanned,
+	DeriveInput, LitStr, Meta, NestedMeta, PathArguments, Token,
+};
+
+use crate::frame::parse_frame_lines;
 
 /// Utility macro to build collection frames, aka. Frames.
 ///
@@ -119,6 +131,176 @@ pub fn frame(tokens: TokenStream) -> TokenStream {
 		e.emit();
 	}
 	proc_macro::TokenStream::from(tokens)
+}
+
+struct LayoutArgs {
+	args: Punctuated<LitStr, Token![,]>,
+}
+
+impl Parse for LayoutArgs {
+	fn parse(input: ParseStream) -> syn::Result<Self> {
+		let content;
+		braced!(content in input);
+		Ok(LayoutArgs { args: content.parse_terminated(<LitStr as Parse>::parse)? })
+	}
+}
+
+fn parse_attr_content(content: Meta) -> Result<Vec<(syn::Path, syn::Lit)>, syn::Error> {
+	match content {
+		Meta::Path(_) => Ok(vec![]),
+		Meta::NameValue(nv) => Ok(vec![(nv.path, nv.lit)]),
+		Meta::List(l) => {
+			let r = l
+				.nested
+				.into_iter()
+				.map(|meta| match meta {
+					NestedMeta::Meta(m) => match m {
+						Meta::NameValue(nv) => Ok((nv.path, nv.lit)),
+						_ => Err(syn::Error::new(m.span(), "Expected 'key = value'")),
+					},
+					NestedMeta::Lit(_) => todo!(),
+				})
+				.collect();
+			r
+		}
+	}
+}
+
+///
+#[proc_macro_error]
+#[proc_macro_derive(StructFrame, attributes(layout))]
+pub fn struct_frame(tokens: TokenStream) -> TokenStream {
+	let input = parse_macro_input!(tokens as DeriveInput);
+
+	let DeriveInput { attrs, ident, generics, data, .. } = input;
+	let (layout, non_layout): (Vec<_>, Vec<_>) =
+		attrs.into_iter().partition(|a| a.path.is_ident("layout"));
+
+	let widget_indexes = match data {
+		syn::Data::Union(_) => {
+			abort!(Span::call_site(), "Can't build a struct frame from a union.")
+		}
+		syn::Data::Enum(_) => abort!(Span::call_site(), "Can't build a struct frame from an enum."),
+		syn::Data::Struct(content) => {
+			let mut res = HashMap::new();
+			for (field_index, f) in content.fields.into_iter().enumerate() {
+				let (mut attr_details, others): (Vec<_>, Vec<_>) =
+					f.attrs.iter().partition(|f| f.path.is_ident("layout"));
+				if attr_details.len() != 1 {
+					abort!(
+						f.span(),
+						"Expecting ONE attribute #[layout(...)] per field. Found: {:?}",
+						others
+							.into_iter()
+							.map(|a| a.path.get_ident().unwrap().to_string())
+							.collect::<Vec<_>>()
+					);
+				}
+				let attr_details = match attr_details.pop() {
+					None => Ok(vec![]),
+					Some(d) => d.parse_meta().map(parse_attr_content).unwrap_or_else(|e| Err(e)),
+				};
+				// Extract attr_details
+				let name = attr_details
+					.map(|d| {
+						d.into_iter().try_fold(None, |name, (p, val)| {
+							if p.is_ident("name") {
+								if name.is_some() {
+									Err(syn::Error::new(
+										p.span(),
+										"Multiple 'name' fields unexpected",
+									))
+								} else {
+									match val {
+										syn::Lit::Char(c) => Ok(Some(c)),
+										_ => Err(syn::Error::new(val.span(), "Expected a char")),
+									}
+								}
+							} else {
+								Err(syn::Error::new(p.span(), "Unexpected key. Expected 'name'"))
+							}
+						})
+					})
+					.unwrap_or_else(|e| Err(e));
+				let name = match name {
+					Ok(Some(d)) => d,
+					Ok(None) => abort!(f.span(), "Missing name for frame layout"),
+					Err(e) => return e.to_compile_error().into(),
+				};
+
+				let details = (
+					// How to access the field
+					f.ident.map(|i| quote!(#i)).unwrap_or(quote!(#field_index)),
+					// Size
+					RefCell::new(None),
+				);
+				if let Some(_) = res.insert(name.value(), details) {
+					abort!(
+						name.span(),
+						"There are multiple fields of frame name {:?}.",
+						name.value()
+					);
+				}
+			}
+			res
+		}
+	};
+
+	let mut errors = vec![];
+	let mut frame_width = None;
+	let layout_body = if layout.len() != 1 {
+		abort!(
+			Span::call_site(),
+			"Expecting ONE `#[layout {{}}]` attribute to indicate the frame's layout. Found: {:?}",
+			non_layout
+				.into_iter()
+				.map(|a| a.path.get_ident().unwrap().to_string())
+				.collect::<Vec<_>>()
+		);
+	} else {
+		let layout_raw: LayoutArgs = parse2(layout[0].tokens.clone()).unwrap();
+		parse_frame_lines(
+			&mut frame_width,
+			&mut errors,
+			&layout_raw.args.into_iter().collect::<Vec<_>>(),
+			widget_indexes.iter().map(|(name, (_, size))| (*name, size)).collect(),
+		)
+	};
+	let frame_width = frame_width.expect("Error: Empty layout on struct frame");
+	let frame_height = layout_body.len();
+
+	let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+	let disp_content = layout_body.into_iter().enumerate().map(|(line, (prefix, line_parts))| {
+		let line_parts = line_parts.into_iter().map(|(((name, _), line_i), suffix)| {
+			let (field, _size) = &widget_indexes[&name];
+			quote! {
+				self.#field.displ_line(f, #line_i)?;
+				f.write_str(#suffix)?;
+			}
+		});
+		quote!(#line => {
+			f.write_str(#prefix)?;
+			#(#line_parts)*
+		})
+	});
+
+	let expanded = quote! {
+		#(#errors)* // Give the errors
+		impl #impl_generics Widget for #ident #ty_generics #where_clause {
+			fn displ_line(&self, f: &mut core::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
+				match line {
+					#(#disp_content,)*
+					_ => panic!("Displaying line out of struct frame"),
+				}
+				Ok(())
+			}
+			fn size(&self) -> (usize, usize) {
+				(#frame_width, #frame_height)
+			}
+		}
+	};
+	proc_macro::TokenStream::from(expanded)
 }
 
 /// Derive macro to automatically implement [`Display`](std::fmt::Display) on widgets.

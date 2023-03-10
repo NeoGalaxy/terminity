@@ -187,7 +187,8 @@ impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> D
 
 #[cfg(test)]
 mod tests {
-	use terminity_widgets_proc::frame;
+	use format::lazy_format;
+	use terminity_widgets_proc::{frame, StructFrame};
 
 	use super::*;
 	struct Img {
@@ -281,5 +282,47 @@ mod tests {
 			]
 			.join(&format!("{}\n\r", crate::_reexport::Clear(crate::_reexport::UntilNewLine)))
 		)
+	}
+
+	#[derive(StructFrame)]
+	#[layout {
+		"*-------------*",
+		"| HHHHHHHHHHH |",
+		"|   ccccccc   |",
+		"| l ccccccc r |",
+		"|   ccccccc   |",
+		"| FFFFFFFFFFF |",
+		"*-------------*",
+	}]
+	struct MyFrame {
+		#[layout(name = 'c')]
+		content: Img,
+		#[layout(name = 'H')]
+		header: Img,
+		#[layout(name = 'l')]
+		left: Img,
+		#[layout(name = 'r')]
+		right: Img,
+		#[layout(name = 'F')]
+		footer: Img,
+	}
+
+	#[test]
+	fn struct_frame() {
+		let s_frame = MyFrame {
+			content: Img { content: vec!["1234567".into(); 3], size: (7, 3) },
+			header: Img { content: vec!["abcdefghijk".into()], size: (11, 1) },
+			left: Img { content: vec!["A".into()], size: (1, 1) },
+			right: Img { content: vec!["B".into()], size: (1, 1) },
+			footer: Img { content: vec!["lmnopqrstuv".into()], size: (11, 1) },
+		};
+
+		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 0)).to_string());
+		assert_eq!("| abcdefghijk |", &lazy_format!(|f| s_frame.displ_line(f, 1)).to_string());
+		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 2)).to_string());
+		assert_eq!("| A 1234567 B |", &lazy_format!(|f| s_frame.displ_line(f, 3)).to_string());
+		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 4)).to_string());
+		assert_eq!("| lmnopqrstuv |", &lazy_format!(|f| s_frame.displ_line(f, 5)).to_string());
+		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 6)).to_string());
 	}
 }
