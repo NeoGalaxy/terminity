@@ -186,13 +186,13 @@ mod tests {
 
 	#[test]
 	fn new_array() {
-		let img1 = Img { content: vec!["Hello".to_owned(), "~~~~~".to_owned()], size: (5, 2) };
+		let img1 = Img { content: vec!["Hello ".to_owned(), "~~~~~ ".to_owned()], size: (6, 2) };
 		let img2 = Img { content: vec!["World!".to_owned(), "~~~~~~".to_owned()], size: (6, 2) };
 		let frame0 = frame!(
 			['H': img1, 'W': img2]
 			r"/==================\"
-			r"| * HHHHH WWWWWW * |"
-			r"| * HHHHH WWWWWW * |"
+			r"| * HHHHHHWWWWWW * |"
+			r"| * HHHHHHWWWWWW * |"
 			r"\==================/"
 		);
 

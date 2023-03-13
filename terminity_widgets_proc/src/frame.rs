@@ -294,9 +294,9 @@ pub fn parse_frame_lines<'a>(
 					let above = last_indexes
 						.binary_search_by(|(_, _, (start, end), _)| {
 							if (start_index..end_index).contains(start)
-								|| (start_index..end_index).contains(end)
+								|| (start_index..end_index).contains(&(end - 1))
 								|| (*start..*end).contains(&start_index)
-								|| (*start..*end).contains(&end_index)
+								|| (*start..*end).contains(&(end_index - 1))
 							{
 								Ordering::Equal
 							} else {
