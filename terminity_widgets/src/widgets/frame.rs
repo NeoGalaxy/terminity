@@ -22,8 +22,7 @@ use unicode_segmentation::UnicodeSegmentation;
 ///
 /// The generics arguments of Frame are:
 /// * `Idx`: the type of the indexes to access the collection's content
-/// * `Item`: the type of the children widgets
-/// * `Coll`: the type of the wrapped collection
+/// * `Coll`: the type of the collection, who's values when indexed by `Idx` should be Widgets
 ///
 /// Building a frame itself might not seem straightforward, so the [frame macro](crate::frame) is
 /// given to help building it. Check it's documentation for more details.
@@ -54,7 +53,11 @@ use unicode_segmentation::UnicodeSegmentation;
 /// "Structure Frames" will be a thing. A structure frame will be implemented through a trait and a
 /// macro, allowing more flexibility in the types of the frame's children.
 #[derive(WidgetDisplay)]
-pub struct Frame<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> {
+pub struct Frame<Idx, Coll: Index<Idx>>
+where
+	Idx: ToOwned<Owned = Idx>,
+	Coll::Output: Widget,
+{
 	content: Vec<(String, Vec<((Idx, usize), String)>)>,
 	widgets: Coll,
 	size: (usize, usize),
@@ -62,11 +65,10 @@ pub struct Frame<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Outpu
 }
 
 impl<
-		// That's a lot of generics...
 		Idx: ToOwned<Owned = Idx> + Eq + Hash + Clone,
-		Item: Widget,
 		Coll: Index<Idx, Output = Item>,
-	> Frame<Idx, Item, Coll>
+		Item: Widget,
+	> Frame<Idx, Coll>
 {
 	/// Creates a frame out of the given widgets. Finds the frame's size using the first line.
 	///
@@ -109,40 +111,10 @@ impl<
 	}
 }
 
-/*impl<
-		Idx: ToOwned<Owned = Idx> + PartialEq + Clone,
-		Item: Widget,
-		Coll: Index<Idx, Output = Item>,
-	> Frame<Idx, Item, Coll>
-{
-	/// Gives the x coordinate of the first occurence of the element
-	/// of index `element_index` in the collection. Panics if the
-	/// line is out of the frame. (As a frame has a fixed size, any
-	/// access outside of it shouldn't occur)
-	pub fn find_x(&self, line: usize, element_index: Idx) -> Option<usize> {
-		macro_rules! str_len {
-			($str:expr) => {
-				String::from_utf8(strip_ansi_escapes::strip($str).unwrap())
-					.unwrap()
-					.graphemes(true)
-					.count()
-			};
-		}
-		self.content[line].1.iter().enumerate().find(|(_, (el, _))| el.0 == element_index).map(
-			|(i, _)| {
-				self.content[line].1[0..i].iter().fold(
-					str_len!(&self.content[line].0),
-					|tot, ((widget_id, _), suffix)| {
-						tot + self.widgets[(*widget_id).to_owned()].size().0 + str_len!(suffix)
-					},
-				)
-			},
-		)
-	}
-}*/
-
-impl<Idx: ToOwned<Owned = Idx> + Eq + Hash, Item: Widget, Coll: Index<Idx, Output = Item>>
-	Frame<Idx, Item, Coll>
+impl<Idx, Coll: Index<Idx>> Frame<Idx, Coll>
+where
+	Idx: ToOwned<Owned = Idx> + Eq + Hash,
+	Coll::Output: Widget,
 {
 	// TODO: example
 	/// Gives the coordinates of the first occurrence of the element
@@ -151,8 +123,11 @@ impl<Idx: ToOwned<Owned = Idx> + Eq + Hash, Item: Widget, Coll: Index<Idx, Outpu
 		self.positions.get(element_index).copied()
 	}
 }
-impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> Widget
-	for Frame<Idx, Item, Coll>
+
+impl<Idx, Coll: Index<Idx>> Widget for Frame<Idx, Coll>
+where
+	Idx: ToOwned<Owned = Idx>,
+	Coll::Output: Widget,
 {
 	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let (begin, widgets_line) = &self.content[line as usize];
@@ -168,8 +143,10 @@ impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> W
 	}
 }
 
-impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> Deref
-	for Frame<Idx, Item, Coll>
+impl<Idx, Coll: Index<Idx>> Deref for Frame<Idx, Coll>
+where
+	Idx: ToOwned<Owned = Idx>,
+	Coll::Output: Widget,
 {
 	type Target = Coll;
 	fn deref(&self) -> &Self::Target {
@@ -177,8 +154,10 @@ impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> D
 	}
 }
 
-impl<Idx: ToOwned<Owned = Idx>, Item: Widget, Coll: Index<Idx, Output = Item>> DerefMut
-	for Frame<Idx, Item, Coll>
+impl<Idx, Coll: Index<Idx>> DerefMut for Frame<Idx, Coll>
+where
+	Idx: ToOwned<Owned = Idx>,
+	Coll::Output: Widget,
 {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		&mut self.widgets
