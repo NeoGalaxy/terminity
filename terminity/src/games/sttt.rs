@@ -34,7 +34,7 @@ type Player = u8;
 
 struct GameState<'a> {
 	pub out: &'a mut dyn io::Write,
-	pub area: Frame<(u8, u8), Zone, GameArea>,
+	pub area: Frame<(u8, u8), GameArea>,
 	pub selected: Selection,
 	pub player: u8,
 	pub text: Text<7>,
