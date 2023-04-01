@@ -1,14 +1,18 @@
 //! Defines the [Frame] widget.
-use crate as terminity_widgets; // For the macros
+use crate as terminity_widgets;
+use crate::MouseEventWidget;
+// For the macros
 use crate::Widget;
-use crate::WidgetDisplay;
-
+use crossterm::event::MouseEvent;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ops::Index;
+use std::ops::IndexMut;
 use unicode_segmentation::UnicodeSegmentation;
 
 /// A Frame[^coll] is a widget containing a collection of widgets that it is able to display.
@@ -52,23 +56,19 @@ use unicode_segmentation::UnicodeSegmentation;
 /// [^coll]: "Frame" may be referred as "Collection Frame" (but still named `Frame` in code) when
 /// "Structure Frames" will be a thing. A structure frame will be implemented through a trait and a
 /// macro, allowing more flexibility in the types of the frame's children.
-#[derive(WidgetDisplay)]
-pub struct Frame<Idx, Coll: Index<Idx>>
-where
-	Idx: ToOwned<Owned = Idx>,
-	Coll::Output: Widget,
-{
-	content: Vec<(String, Vec<((Idx, usize), String)>)>,
+pub struct Frame<Key, Coll> {
+	content: Vec<(String, Vec<((Key, usize), String)>)>,
 	widgets: Coll,
 	size: (usize, usize),
-	positions: HashMap<Idx, (usize, usize)>,
+	positions: HashMap<Key, (usize, usize)>,
+	_phantom: PhantomData<Key>,
 }
 
-impl<
-		Idx: ToOwned<Owned = Idx> + Eq + Hash + Clone,
-		Coll: Index<Idx, Output = Item>,
-		Item: Widget,
-	> Frame<Idx, Coll>
+impl<Key, Coll> Frame<Key, Coll>
+where
+	Key: Eq + Hash + Clone,
+	Coll: Index<Key>,
+	Coll::Output: Widget,
 {
 	/// Creates a frame out of the given widgets. Finds the frame's size using the first line.
 	///
@@ -82,7 +82,7 @@ impl<
 	///
 	/// If this function seems too complicated to use, consider using the [`frame!`](crate::frame)
 	/// macro, that actually just compiles to an assignation and a `Frame::new` invocation.
-	pub fn new(content: Vec<(String, Vec<((Idx, usize), String)>)>, widgets: Coll) -> Self {
+	pub fn new(content: Vec<(String, Vec<((Key, usize), String)>)>, widgets: Coll) -> Self {
 		macro_rules! str_len {
 			($str:expr) => {
 				String::from_utf8(strip_ansi_escapes::strip($str).unwrap())
@@ -99,41 +99,42 @@ impl<
 			let mut x_pos = 0;
 			let mut previous = prefix;
 			for (item, suffix) in line {
+				let item = item.clone();
 				x_pos += str_len!(previous);
 				if item.1 == 0 {
 					positions.insert(item.0.clone(), (x_pos, y_pos));
 				}
-				x_pos += widgets[item.0.to_owned()].size().0;
+				x_pos += widgets[item.0.clone()].size().0;
 				previous = suffix;
 			}
 		}
-		Self { content, widgets, size, positions }
+		Self { content, widgets, size, positions, _phantom: PhantomData }
 	}
 }
 
-impl<Idx, Coll: Index<Idx>> Frame<Idx, Coll>
+impl<Key, Coll> Frame<Key, Coll>
 where
-	Idx: ToOwned<Owned = Idx> + Eq + Hash,
-	Coll::Output: Widget,
+	Key: Eq + Hash + Clone,
 {
 	// TODO: example
 	/// Gives the coordinates of the first occurrence of the element
 	/// of index `element_index` in the collection.
-	pub fn find_pos(&self, element_index: &Idx) -> Option<(usize, usize)> {
+	pub fn find_pos(&self, element_index: &Key) -> Option<(usize, usize)> {
 		self.positions.get(element_index).copied()
 	}
 }
 
-impl<Idx, Coll: Index<Idx>> Widget for Frame<Idx, Coll>
+impl<Key, Coll> Widget for Frame<Key, Coll>
 where
-	Idx: ToOwned<Owned = Idx>,
+	Key: Clone,
+	Coll: Index<Key>,
 	Coll::Output: Widget,
 {
 	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let (begin, widgets_line) = &self.content[line as usize];
 		f.write_str(&begin)?;
 		for ((widget_i, w_line), postfix) in widgets_line {
-			self.widgets[widget_i.to_owned()].displ_line(f, *w_line)?;
+			self.widgets[widget_i.clone()].displ_line(f, *w_line)?;
 			f.write_str(&postfix)?;
 		}
 		Ok(())
@@ -143,22 +144,73 @@ where
 	}
 }
 
-impl<Idx, Coll: Index<Idx>> Deref for Frame<Idx, Coll>
+impl<Key, Coll> Display for Frame<Key, Coll>
 where
-	Idx: ToOwned<Owned = Idx>,
+	Key: Clone,
+	Coll: Index<Key>,
 	Coll::Output: Widget,
 {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		for i in 0..self.size().1 {
+			self.displ_line(f, i)?;
+			if i != self.size().1 - 1 {
+				f.write_str(&format!(
+					"{}\n\r",
+					terminity_widgets::_reexport::Clear(terminity_widgets::_reexport::UntilNewLine)
+				))?;
+			}
+		}
+		Ok(())
+	}
+}
+
+impl<Key, Coll> MouseEventWidget for Frame<Key, Coll>
+where
+	Key: Clone,
+	Coll: IndexMut<Key>,
+	Coll::Output: MouseEventWidget,
+{
+	type MouseHandlingResult = Option<<Coll::Output as MouseEventWidget>::MouseHandlingResult>;
+	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult {
+		let MouseEvent { column: column_index, row: row_index, kind, modifiers } = event;
+		// TODO: optimize
+		let (prefix, row) = &self.content[row_index as usize];
+		// TODO: find better way to get length without ansi
+		let mut curr_col = String::from_utf8(strip_ansi_escapes::strip(&prefix).unwrap())
+			.unwrap()
+			.graphemes(true)
+			.count();
+		for (widget_data, suffix) in row {
+			if curr_col > column_index as usize {
+				break;
+			}
+			let widget = &mut self.widgets[widget_data.0.clone()];
+			if curr_col + widget.size().0 > column_index as usize {
+				return Some(widget.mouse_event(MouseEvent {
+					column: column_index - curr_col as u16,
+					row: row_index,
+					kind,
+					modifiers,
+				}));
+			}
+			curr_col += widget.size().0
+				+ String::from_utf8(strip_ansi_escapes::strip(&suffix).unwrap())
+					.unwrap()
+					.graphemes(true)
+					.count();
+		}
+		None
+	}
+}
+
+impl<Key, Coll> Deref for Frame<Key, Coll> {
 	type Target = Coll;
 	fn deref(&self) -> &Self::Target {
 		&self.widgets
 	}
 }
 
-impl<Idx, Coll: Index<Idx>> DerefMut for Frame<Idx, Coll>
-where
-	Idx: ToOwned<Owned = Idx>,
-	Coll::Output: Widget,
-{
+impl<Key, Coll> DerefMut for Frame<Key, Coll> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		&mut self.widgets
 	}
@@ -258,6 +310,60 @@ mod tests {
 				"|7|8|9|",
 				"|é|é|é|",
 				"#-#-#-#",
+			]
+			.join(&format!("{}\n\r", crate::_reexport::Clear(crate::_reexport::UntilNewLine)))
+		)
+	}
+
+	#[test]
+	fn ref_keys_hashmap_frame() {
+		let values = HashMap::from([
+			(
+				"Foo".to_string(),
+				Img { content: vec!["Foo".to_owned(), "Foo".to_owned()], size: (3, 2) },
+			),
+			(
+				"Bar".to_string(),
+				Img { content: vec!["Bar".to_owned(), "Bar".to_owned()], size: (3, 2) },
+			),
+			(
+				"Foo2".to_string(),
+				Img { content: vec!["Foo".to_owned(), "two".to_owned()], size: (3, 2) },
+			),
+			(
+				"Bar2".to_string(),
+				Img { content: vec!["Bar".to_owned(), "two".to_owned()], size: (3, 2) },
+			),
+		]);
+		//let x = "aaa".to_string();
+		//let y = x.into_maybe_ref();
+		let names = ["Foo".to_string(), "Bar".to_string(), "Foo2".to_string(), "Bar2".to_string()];
+		let frame0 = frame!(
+		values => {
+			'f': &names[0],
+			'b': &names[1],
+			'F': &names[2],
+			'B': &names[3],
+		}
+		"#---#---#"
+		"|fff|bbb|"
+		"|fff|bbb|"
+		"#---#---#"
+		"|FFF|BBB|"
+		"|FFF|BBB|"
+		"#---#---#"
+		);
+
+		assert_eq!(
+			frame0.to_string(),
+			[
+				"#---#---#",
+				"|Foo|Bar|",
+				"|Foo|Bar|",
+				"#---#---#",
+				"|Foo|Bar|",
+				"|two|two|",
+				"#---#---#",
 			]
 			.join(&format!("{}\n\r", crate::_reexport::Clear(crate::_reexport::UntilNewLine)))
 		)
