@@ -13,6 +13,7 @@
 use std::fmt::Formatter;
 
 pub use terminity_widgets_proc::frame;
+pub use terminity_widgets_proc::StructFrame;
 pub use terminity_widgets_proc::WidgetDisplay;
 
 pub mod widgets;

@@ -218,6 +218,7 @@ impl<Key, Coll> DerefMut for Frame<Key, Coll> {
 
 #[cfg(test)]
 mod tests {
+	use crossterm::event::KeyModifiers;
 	use format::lazy_format;
 	use terminity_widgets_proc::{frame, StructFrame};
 
@@ -225,6 +226,7 @@ mod tests {
 	struct Img {
 		content: Vec<String>,
 		size: (usize, usize),
+		event_res: u64,
 	}
 
 	impl Widget for Img {
@@ -236,10 +238,32 @@ mod tests {
 		}
 	}
 
+	impl MouseEventWidget for Img {
+		type MouseHandlingResult = u64;
+		fn mouse_event(
+			&mut self,
+			_event: crossterm::event::MouseEvent,
+		) -> Self::MouseHandlingResult {
+			self.event_res
+		}
+	}
+
+	/*impl Trait for Type {
+		// add code here
+	}*/
+
 	#[test]
 	fn new_array() {
-		let img1 = Img { content: vec!["Hello ".to_owned(), "~~~~~ ".to_owned()], size: (6, 2) };
-		let img2 = Img { content: vec!["World!".to_owned(), "~~~~~~".to_owned()], size: (6, 2) };
+		let img1 = Img {
+			content: vec!["Hello ".to_owned(), "~~~~~ ".to_owned()],
+			size: (6, 2),
+			event_res: 0,
+		};
+		let img2 = Img {
+			content: vec!["World!".to_owned(), "~~~~~~".to_owned()],
+			size: (6, 2),
+			event_res: 0,
+		};
 		let frame0 = frame!(
 			['H': img1, 'W': img2]
 			r"/==================\"
@@ -263,15 +287,51 @@ mod tests {
 	#[test]
 	fn extern_collection() {
 		let values = vec![
-			Img { content: vec!["A".to_owned(), "1".to_owned(), "é".to_owned()], size: (1, 3) },
-			Img { content: vec!["F".to_owned(), "2".to_owned(), "é".to_owned()], size: (1, 3) },
-			Img { content: vec!["S".to_owned(), "3".to_owned(), "é".to_owned()], size: (1, 3) },
-			Img { content: vec!["Q".to_owned(), "4".to_owned(), "é".to_owned()], size: (1, 3) },
-			Img { content: vec!["E".to_owned(), "5".to_owned(), "é".to_owned()], size: (1, 3) },
-			Img { content: vec!["Z".to_owned(), "6".to_owned(), "é".to_owned()], size: (1, 3) },
-			Img { content: vec!["K".to_owned(), "7".to_owned(), "é".to_owned()], size: (1, 3) },
-			Img { content: vec!["U".to_owned(), "8".to_owned(), "é".to_owned()], size: (1, 3) },
-			Img { content: vec!["O".to_owned(), "9".to_owned(), "é".to_owned()], size: (1, 3) },
+			Img {
+				content: vec!["A".to_owned(), "1".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
+			Img {
+				content: vec!["F".to_owned(), "2".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
+			Img {
+				content: vec!["S".to_owned(), "3".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
+			Img {
+				content: vec!["Q".to_owned(), "4".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
+			Img {
+				content: vec!["E".to_owned(), "5".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
+			Img {
+				content: vec!["Z".to_owned(), "6".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
+			Img {
+				content: vec!["K".to_owned(), "7".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
+			Img {
+				content: vec!["U".to_owned(), "8".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
+			Img {
+				content: vec!["O".to_owned(), "9".to_owned(), "é".to_owned()],
+				size: (1, 3),
+				event_res: 0,
+			},
 		];
 		let frame0 = frame!(
 		values => {
@@ -320,19 +380,35 @@ mod tests {
 		let values = HashMap::from([
 			(
 				"Foo".to_string(),
-				Img { content: vec!["Foo".to_owned(), "Foo".to_owned()], size: (3, 2) },
+				Img {
+					content: vec!["Foo".to_owned(), "Foo".to_owned()],
+					size: (3, 2),
+					event_res: 0,
+				},
 			),
 			(
 				"Bar".to_string(),
-				Img { content: vec!["Bar".to_owned(), "Bar".to_owned()], size: (3, 2) },
+				Img {
+					content: vec!["Bar".to_owned(), "Bar".to_owned()],
+					size: (3, 2),
+					event_res: 0,
+				},
 			),
 			(
 				"Foo2".to_string(),
-				Img { content: vec!["Foo".to_owned(), "two".to_owned()], size: (3, 2) },
+				Img {
+					content: vec!["Foo".to_owned(), "two".to_owned()],
+					size: (3, 2),
+					event_res: 0,
+				},
 			),
 			(
 				"Bar2".to_string(),
-				Img { content: vec!["Bar".to_owned(), "two".to_owned()], size: (3, 2) },
+				Img {
+					content: vec!["Bar".to_owned(), "two".to_owned()],
+					size: (3, 2),
+					event_res: 0,
+				},
 			),
 		]);
 		//let x = "aaa".to_string();
@@ -370,7 +446,8 @@ mod tests {
 	}
 
 	#[derive(StructFrame)]
-	#[layout {
+	#[sf_impl(MouseEventWidget)]
+	#[sf_layout {
 		"*-------------*",
 		"| HHHHHHHHHHH |",
 		"|   ccccccc   |",
@@ -380,26 +457,26 @@ mod tests {
 		"*-------------*",
 	}]
 	struct MyFrame {
-		#[layout(name = 'c')]
+		#[sf_layout(name = 'c')]
 		content: Img,
-		#[layout(name = 'H')]
+		#[sf_layout(name = 'H')]
 		header: Img,
-		#[layout(name = 'l')]
+		#[sf_layout(name = 'l')]
 		left: Img,
-		#[layout(name = 'r')]
+		#[sf_layout(name = 'r')]
 		right: Img,
-		#[layout(name = 'F')]
+		#[sf_layout(name = 'F')]
 		footer: Img,
 	}
 
 	#[test]
 	fn struct_frame() {
-		let s_frame = MyFrame {
-			content: Img { content: vec!["1234567".into(); 3], size: (7, 3) },
-			header: Img { content: vec!["abcdefghijk".into()], size: (11, 1) },
-			left: Img { content: vec!["A".into()], size: (1, 1) },
-			right: Img { content: vec!["B".into()], size: (1, 1) },
-			footer: Img { content: vec!["lmnopqrstuv".into()], size: (11, 1) },
+		let mut s_frame = MyFrame {
+			content: Img { content: vec!["1234567".into(); 3], size: (7, 3), event_res: 1 },
+			header: Img { content: vec!["abcdefghijk".into()], size: (11, 1), event_res: 2 },
+			left: Img { content: vec!["A".into()], size: (1, 1), event_res: 3 },
+			right: Img { content: vec!["B".into()], size: (1, 1), event_res: 4 },
+			footer: Img { content: vec!["lmnopqrstuv".into()], size: (11, 1), event_res: 5 },
 		};
 
 		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 0)).to_string());
@@ -409,5 +486,99 @@ mod tests {
 		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 4)).to_string());
 		assert_eq!("| lmnopqrstuv |", &lazy_format!(|f| s_frame.displ_line(f, 5)).to_string());
 		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 6)).to_string());
+
+		assert_eq!(
+			s_frame.mouse_event(MouseEvent {
+				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+				column: 0,
+				row: 0,
+				modifiers: KeyModifiers::empty(),
+			}),
+			None
+		);
+		assert_eq!(
+			s_frame.mouse_event(MouseEvent {
+				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+				column: 2,
+				row: 1,
+				modifiers: KeyModifiers::empty(),
+			}),
+			Some(MyFrameMouseEvents::Header(2))
+		);
+		assert_eq!(
+			s_frame.mouse_event(MouseEvent {
+				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+				column: 4,
+				row: 2,
+				modifiers: KeyModifiers::empty(),
+			}),
+			Some(MyFrameMouseEvents::Content(1))
+		);
+	}
+
+	#[derive(StructFrame)]
+	#[sf_impl(MouseEventWidget)]
+	#[sf_layout {
+		"*-------------*",
+		"| HHHHHHHHHHH |",
+		"|   ccccccc   |",
+		"| l ccccccc r |",
+		"|   ccccccc   |",
+		"| FFFFFFFFFFF |",
+		"*-------------*",
+	}]
+	struct MyTupleFrame(
+		#[sf_layout(name = 'c')] Img,
+		#[sf_layout(name = 'H')] Img,
+		#[sf_layout(name = 'l')] Img,
+		#[sf_layout(name = 'r')] Img,
+		#[sf_layout(name = 'F')] Img,
+	);
+
+	#[test]
+	fn tuple_frame() {
+		let mut s_frame = MyTupleFrame(
+			Img { content: vec!["1234567".into(); 3], size: (7, 3), event_res: 1 },
+			Img { content: vec!["abcdefghijk".into()], size: (11, 1), event_res: 2 },
+			Img { content: vec!["A".into()], size: (1, 1), event_res: 3 },
+			Img { content: vec!["B".into()], size: (1, 1), event_res: 4 },
+			Img { content: vec!["lmnopqrstuv".into()], size: (11, 1), event_res: 5 },
+		);
+
+		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 0)).to_string());
+		assert_eq!("| abcdefghijk |", &lazy_format!(|f| s_frame.displ_line(f, 1)).to_string());
+		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 2)).to_string());
+		assert_eq!("| A 1234567 B |", &lazy_format!(|f| s_frame.displ_line(f, 3)).to_string());
+		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 4)).to_string());
+		assert_eq!("| lmnopqrstuv |", &lazy_format!(|f| s_frame.displ_line(f, 5)).to_string());
+		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 6)).to_string());
+
+		assert_eq!(
+			s_frame.mouse_event(MouseEvent {
+				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+				column: 0,
+				row: 0,
+				modifiers: KeyModifiers::empty(),
+			}),
+			None
+		);
+		assert_eq!(
+			s_frame.mouse_event(MouseEvent {
+				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+				column: 2,
+				row: 1,
+				modifiers: KeyModifiers::empty(),
+			}),
+			Some(MyTupleFrameMouseEvents::_1(2))
+		);
+		assert_eq!(
+			s_frame.mouse_event(MouseEvent {
+				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
+				column: 4,
+				row: 2,
+				modifiers: KeyModifiers::empty(),
+			}),
+			Some(MyTupleFrameMouseEvents::_0(1))
+		);
 	}
 }
