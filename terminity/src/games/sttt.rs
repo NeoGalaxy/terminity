@@ -22,7 +22,7 @@ use terminity_widgets::widgets::auto_padder::AutoPadder;
 use terminity_widgets::widgets::frame::Frame;
 use terminity_widgets::widgets::text::{Align, Text};
 use terminity_widgets::{
-	frame, MouseEventWidget, ResizableWisget, StructFrame, Widget, WidgetDisplay,
+	frame, EventHandleingWidget, ResizableWisget, StructFrame, Widget, WidgetDisplay,
 };
 use Tile::*;
 
@@ -61,7 +61,7 @@ impl Game for SuperTTT {
 			game_state.area[coords].selected = false;
 			match event::read()? {
 				Event::Mouse(e) => {
-					let _ = game_state.mouse_event(e);
+					let _ = game_state.handle_event(e);
 				}
 				Key(KeyEvent { code: Left, kind: Press, .. }) => {
 					if game_state.selected.x > 0 {
@@ -205,7 +205,7 @@ impl Game for SuperTTT {
 type Player = u8;
 
 #[derive(StructFrame, WidgetDisplay)]
-#[sf_impl(MouseEventWidget)]
+#[sf_impl(EventHandleingWidget)]
 #[sf_layout {
 	"                       #########################                       ",
 	"                       #########################                       ",
@@ -320,10 +320,10 @@ impl Widget for Zone {
 	}
 }
 
-impl MouseEventWidget for Zone {
-	type MouseHandlingResult = Option<(usize, usize)>;
-	fn mouse_event(&mut self, event: MouseEvent) -> Self::MouseHandlingResult {
-		let (elem_index, ()) = self.values.mouse_event(event)?;
+impl EventHandleingWidget for Zone {
+	type HandledEvent = Option<(usize, usize)>;
+	fn handle_event(&mut self, event: MouseEvent) -> Self::HandledEvent {
+		let (elem_index, ()) = self.values.handle_event(event)?;
 		Some((elem_index % 3, elem_index / 3))
 	}
 }
@@ -392,9 +392,9 @@ impl Widget for Tile {
 	}
 }
 
-impl MouseEventWidget for Tile {
-	type MouseHandlingResult = ();
-	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult {
+impl EventHandleingWidget for Tile {
+	type HandledEvent = ();
+	fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent {
 		()
 	}
 }

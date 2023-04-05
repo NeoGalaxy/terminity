@@ -1,6 +1,6 @@
 //! Defines the [Frame] widget.
 use crate as terminity_widgets;
-use crate::MouseEventWidget;
+use crate::EventHandleingWidget;
 // For the macros
 use crate::Widget;
 use crossterm::event::MouseEvent;
@@ -41,7 +41,7 @@ use unicode_segmentation::UnicodeSegmentation;
 /// ];
 ///
 /// // Generics not needed here, but written for an example of how they work
-/// let mut framed_texts: Frame<usize, Text<2>, Vec<_>> = frame!(
+/// let mut framed_texts: Frame<usize, Vec<_>> = frame!(
 /// 	texts => { 'H': 0, 'W': 1 }
 /// 	"*~~~~~~~~~~~~~~*"
 /// 	"| HHHHH WWWWW! |"
@@ -164,15 +164,14 @@ where
 	}
 }
 
-impl<Key, Coll> MouseEventWidget for Frame<Key, Coll>
+impl<Key, Coll> EventHandleingWidget for Frame<Key, Coll>
 where
 	Key: Clone,
 	Coll: IndexMut<Key>,
-	Coll::Output: MouseEventWidget,
+	Coll::Output: EventHandleingWidget,
 {
-	type MouseHandlingResult =
-		Option<(Key, <Coll::Output as MouseEventWidget>::MouseHandlingResult)>;
-	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult {
+	type HandledEvent = Option<(Key, <Coll::Output as EventHandleingWidget>::HandledEvent)>;
+	fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent {
 		let MouseEvent { column: column_index, row: row_index, kind, modifiers } = event;
 		// TODO: optimize
 		let (prefix, row) = &self.content[row_index as usize];
@@ -189,7 +188,7 @@ where
 			if curr_col + widget.size().0 > column_index as usize {
 				return Some((
 					widget_data.0.clone(),
-					widget.mouse_event(MouseEvent {
+					widget.handle_event(MouseEvent {
 						column: column_index - curr_col as u16,
 						row: row_index,
 						kind,
@@ -242,12 +241,9 @@ mod tests {
 		}
 	}
 
-	impl MouseEventWidget for Img {
-		type MouseHandlingResult = u64;
-		fn mouse_event(
-			&mut self,
-			_event: crossterm::event::MouseEvent,
-		) -> Self::MouseHandlingResult {
+	impl EventHandleingWidget for Img {
+		type HandledEvent = u64;
+		fn handle_event(&mut self, _event: crossterm::event::MouseEvent) -> Self::HandledEvent {
 			self.event_res
 		}
 	}
@@ -450,7 +446,7 @@ mod tests {
 	}
 
 	#[derive(StructFrame)]
-	#[sf_impl(MouseEventWidget)]
+	#[sf_impl(EventHandleingWidget)]
 	#[sf_layout {
 		"*-------------*",
 		"| HHHHHHHHHHH |",
@@ -492,7 +488,7 @@ mod tests {
 		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 6)).to_string());
 
 		assert_eq!(
-			s_frame.mouse_event(MouseEvent {
+			s_frame.handle_event(MouseEvent {
 				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
 				column: 0,
 				row: 0,
@@ -501,7 +497,7 @@ mod tests {
 			None
 		);
 		assert_eq!(
-			s_frame.mouse_event(MouseEvent {
+			s_frame.handle_event(MouseEvent {
 				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
 				column: 2,
 				row: 1,
@@ -510,7 +506,7 @@ mod tests {
 			Some(MyFrameMouseEvents::Header(2))
 		);
 		assert_eq!(
-			s_frame.mouse_event(MouseEvent {
+			s_frame.handle_event(MouseEvent {
 				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
 				column: 4,
 				row: 2,
@@ -521,7 +517,7 @@ mod tests {
 	}
 
 	#[derive(StructFrame)]
-	#[sf_impl(MouseEventWidget)]
+	#[sf_impl(EventHandleingWidget)]
 	#[sf_layout {
 		"*-------------*",
 		"| HHHHHHHHHHH |",
@@ -558,7 +554,7 @@ mod tests {
 		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 6)).to_string());
 
 		assert_eq!(
-			s_frame.mouse_event(MouseEvent {
+			s_frame.handle_event(MouseEvent {
 				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
 				column: 0,
 				row: 0,
@@ -567,7 +563,7 @@ mod tests {
 			None
 		);
 		assert_eq!(
-			s_frame.mouse_event(MouseEvent {
+			s_frame.handle_event(MouseEvent {
 				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
 				column: 2,
 				row: 1,
@@ -576,7 +572,7 @@ mod tests {
 			Some(MyTupleFrameMouseEvents::_1(2))
 		);
 		assert_eq!(
-			s_frame.mouse_event(MouseEvent {
+			s_frame.handle_event(MouseEvent {
 				kind: crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left),
 				column: 4,
 				row: 2,

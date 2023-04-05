@@ -78,8 +78,8 @@ pub trait Widget {
 /// it may manage it itself or pass it on to a child widget by adapting the coordinates of the mouse
 /// event.
 ///
-/// Be careful: when a parent widget implements Deref, it might still implement MouseEventWidget,
-/// meaning that calling `.mouse_event` will call the parent's implementation and not the child's
+/// Be careful: when a parent widget implements Deref, it might still implement EventHandleingWidget,
+/// meaning that calling `.handle_event` will call the parent's implementation and not the child's
 /// one. This is intended behaviour and designed to make code easier to write and read, assuming
 /// both knows this behaviour.
 ///
@@ -89,7 +89,7 @@ pub trait Widget {
 /// use std::fmt::Formatter;
 /// use terminity_widgets::widgets::auto_padder::AutoPadder;
 /// use crossterm::event::{MouseEvent, MouseEventKind, KeyModifiers};
-/// use terminity_widgets::{Widget, MouseEventWidget};
+/// use terminity_widgets::{Widget, EventHandleingWidget};
 ///
 /// // Defining a custom widget of size `(3, 3)`
 /// // that returns the obtained coordinates on a mouse event
@@ -101,10 +101,10 @@ pub trait Widget {
 /// 		# unimplemented!()
 /// 	# }
 /// }
-/// impl MouseEventWidget for MyWidget {
-/// 	type MouseHandlingResult = (usize, usize);
+/// impl EventHandleingWidget for MyWidget {
+/// 	type HandledEvent = (usize, usize);
 /// 	// Returns the obtained coordinates
-/// 	fn mouse_event(&mut self, event: MouseEvent) -> Self::MouseHandlingResult {
+/// 	fn handle_event(&mut self, event: MouseEvent) -> Self::HandledEvent {
 /// 		(event.row as usize, event.column as usize)
 /// 	}
 /// }
@@ -129,16 +129,16 @@ pub trait Widget {
 /// };
 ///
 /// // (0, 0) is outside of the child, so AutoPadder returns None.
-/// assert_eq!(my_widget.mouse_event(event0), None);
+/// assert_eq!(my_widget.handle_event(event0), None);
 ///
 /// // (2, 2) is inside of the child, AutoPadder bubbles the event by adapting the coordinates.
-/// assert_eq!(my_widget.mouse_event(event1), Some((1, 1)));
+/// assert_eq!(my_widget.handle_event(event1), Some((1, 1)));
 /// ```
-pub trait MouseEventWidget: Widget {
-	/// The type of the return value of the `mouse_event` call.
-	type MouseHandlingResult;
+pub trait EventHandleingWidget: Widget {
+	/// The type of the return value of the `handle_event` call.
+	type HandledEvent;
 	/// Handles a mouse event. see the [trait](Self)'s doc for more details.
-	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult;
+	fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent;
 }
 
 /// A widget that supports resizing.

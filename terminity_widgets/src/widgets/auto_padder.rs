@@ -2,7 +2,7 @@
 use crossterm::event::MouseEvent;
 
 use crate as terminity_widgets;
-use crate::MouseEventWidget;
+use crate::EventHandleingWidget;
 use crate::ResizableWisget;
 use crate::Widget;
 use crate::WidgetDisplay;
@@ -70,9 +70,9 @@ impl<W: Widget> Widget for AutoPadder<W> {
 	}
 }
 
-impl<W: MouseEventWidget> MouseEventWidget for AutoPadder<W> {
-	type MouseHandlingResult = Option<W::MouseHandlingResult>;
-	fn mouse_event(&mut self, event: MouseEvent) -> Self::MouseHandlingResult {
+impl<W: EventHandleingWidget> EventHandleingWidget for AutoPadder<W> {
+	type HandledEvent = Option<W::HandledEvent>;
+	fn handle_event(&mut self, event: MouseEvent) -> Self::HandledEvent {
 		let MouseEvent { column, row, kind, modifiers } = event;
 		let mut column = column as i32;
 		let mut row = row as i32;
@@ -87,7 +87,7 @@ impl<W: MouseEventWidget> MouseEventWidget for AutoPadder<W> {
 			&& (column as usize) < content_size.0
 			&& row >= 0 && (row as usize) < content_size.1
 		{
-			Some(self.0.mouse_event(MouseEvent {
+			Some(self.0.handle_event(MouseEvent {
 				kind,
 				column: column as u16,
 				row: row as u16,

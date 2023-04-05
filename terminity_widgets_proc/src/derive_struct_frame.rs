@@ -50,8 +50,8 @@ impl Parse for SFImplArgs {
 
 #[derive(FromMeta)]
 struct SFImplArgs {
-	#[darling(rename = "MouseEventWidget")]
-	mouse_event: Option<()>,
+	#[darling(rename = "EventHandleingWidget")]
+	handle_event: Option<()>,
 }
 
 #[derive(FromMeta)]
@@ -125,7 +125,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				}
 			}
 		}
-		.unwrap_or(SFImplArgs { mouse_event: None });
+		.unwrap_or(SFImplArgs { handle_event: None });
 		(all_impls, layout_content)
 	};
 
@@ -266,13 +266,13 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 		}
 	};
 
-	if all_impls.mouse_event == Some(()) {
+	if all_impls.handle_event == Some(()) {
 		let enum_name = Ident::new(&(ident.to_string() + "MouseEvents"), ident.span());
 
 		let enum_variants =
 			widget_indexes.values().map(|(_, variant, field_type, _)| match variant {
 				Some(v) => quote! {
-					#v(<#field_type as terminity_widgets::MouseEventWidget>::MouseHandlingResult),
+					#v(<#field_type as terminity_widgets::EventHandleingWidget>::HandledEvent),
 				},
 				None => quote!(),
 			});
@@ -301,7 +301,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 							}
 							if curr_col + self.#field.size().0 > column as usize {
 								return Some(#enum_name::#variant(
-										terminity_widgets::MouseEventWidget::mouse_event(
+										terminity_widgets::EventHandleingWidget::handle_event(
 											&mut self.#field,
 											crossterm::event::MouseEvent {
 												column: column - curr_col as u16,
@@ -330,9 +330,9 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				#(#enum_variants)*
 			}
 
-			impl #impl_generics terminity_widgets::MouseEventWidget for #ident #ty_generics #where_clause {
-				type MouseHandlingResult = Option<#enum_name>;
-				fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult {
+			impl #impl_generics terminity_widgets::EventHandleingWidget for #ident #ty_generics #where_clause {
+				type HandledEvent = Option<#enum_name>;
+				fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent {
 					let crossterm::event::MouseEvent { column, row, kind, modifiers } = event;
 					match row as usize {
 						#(#mouse_event_content)*
@@ -353,7 +353,7 @@ mod tests {
 	#[test]
 	fn a() {
 		let input = quote! {
-			#[sf_impl(MouseEventWidget)]
+			#[sf_impl(EventHandleingWidget)]
 			#[sf_layout {
 				"*-------------*",
 				"| HHHHHHHHHHH |",
