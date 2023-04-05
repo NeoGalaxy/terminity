@@ -13,14 +13,17 @@ use std::{
 
 use super::Game;
 use crossterm::cursor::MoveTo;
-use crossterm::event::{self, KeyModifiers};
+use crossterm::event::{self, KeyModifiers, MouseEvent};
 use crossterm::style::{Color, ContentStyle, Stylize};
 use crossterm::terminal::{self, Clear};
 use crossterm::QueueableCommand;
+use format::lazy_format;
 use terminity_widgets::widgets::auto_padder::AutoPadder;
 use terminity_widgets::widgets::frame::Frame;
 use terminity_widgets::widgets::text::{Align, Text};
-use terminity_widgets::{frame, ResizableWisget, StructFrame, Widget, WidgetDisplay};
+use terminity_widgets::{
+	frame, MouseEventWidget, ResizableWisget, StructFrame, Widget, WidgetDisplay,
+};
 use Tile::*;
 
 #[derive(Debug)]
@@ -230,7 +233,7 @@ struct GameState {
 	pub area: Frame<(u8, u8), GameArea>,
 	pub selected: Selection,
 	pub player: u8,
-	#[sf_layout(name = 'T')]
+	#[sf_layout(name = 'T', ignore_mouse_event)]
 	pub text: Text<7>,
 }
 
@@ -247,14 +250,30 @@ enum SelectType {
 	Zone,
 }
 
-#[derive(Debug)]
+//#[derive(Debug)]
 struct Zone {
-	pub values: [Tile; 9],
+	pub values: Frame<usize, [Tile; 9]>,
 	pub winner: Option<Tile>,
 	pub selected: bool,
 }
 
-impl Widget for Zone {
+impl Default for Zone {
+	fn default() -> Self {
+		let content = [Tile::Empty; 9];
+		Self {
+			values: frame! {
+				content of size<1, 1> => {repeat 'X': 0..9}
+				" X X X "
+				" X X X "
+				" X X X "
+			},
+			winner: None,
+			selected: false,
+		}
+	}
+}
+
+/*impl Widget for Zone {
 	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let mut style = ContentStyle::new();
 		if let Some(winner) = self.winner {
@@ -280,9 +299,36 @@ impl Widget for Zone {
 	fn size(&self) -> (usize, usize) {
 		(7, 3)
 	}
+}*/
+
+impl Widget for Zone {
+	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+		let mut style = ContentStyle::new();
+		if let Some(winner) = self.winner {
+			style.background_color = Some(winner.get_color());
+			style.foreground_color = Some(Color::Black);
+		}
+		if self.selected {
+			style.background_color = Some(Color::Grey);
+			style.foreground_color = style.background_color;
+		}
+		let to_disp = lazy_format!(|fmt| self.values.displ_line(fmt, line)).to_string();
+		f.write_fmt(format_args!("{}", style.apply(to_disp)))
+	}
+	fn size(&self) -> (usize, usize) {
+		self.values.size()
+	}
 }
 
-#[derive(Debug, Default)]
+impl MouseEventWidget for Zone {
+	type MouseHandlingResult = Option<(usize, usize)>;
+	fn mouse_event(&mut self, event: MouseEvent) -> Self::MouseHandlingResult {
+		let (elem_index, ()) = self.values.mouse_event(event)?;
+		Some((elem_index % 3, elem_index / 3))
+	}
+}
+
+#[derive(Default)]
 struct GameArea([Zone; 9]);
 
 impl Index<(u8, u8)> for GameArea {
@@ -336,9 +382,20 @@ impl Display for Tile {
 	}
 }
 
-impl Default for Zone {
-	fn default() -> Self {
-		Self { values: [Empty; 9], winner: None, selected: false }
+impl Widget for Tile {
+	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+		self.fmt(f)
+	}
+	#[inline]
+	fn size(&self) -> (usize, usize) {
+		(1, 1)
+	}
+}
+
+impl MouseEventWidget for Tile {
+	type MouseHandlingResult = ();
+	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult {
+		()
 	}
 }
 

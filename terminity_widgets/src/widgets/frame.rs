@@ -170,7 +170,8 @@ where
 	Coll: IndexMut<Key>,
 	Coll::Output: MouseEventWidget,
 {
-	type MouseHandlingResult = Option<<Coll::Output as MouseEventWidget>::MouseHandlingResult>;
+	type MouseHandlingResult =
+		Option<(Key, <Coll::Output as MouseEventWidget>::MouseHandlingResult)>;
 	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult {
 		let MouseEvent { column: column_index, row: row_index, kind, modifiers } = event;
 		// TODO: optimize
@@ -186,12 +187,15 @@ where
 			}
 			let widget = &mut self.widgets[widget_data.0.clone()];
 			if curr_col + widget.size().0 > column_index as usize {
-				return Some(widget.mouse_event(MouseEvent {
-					column: column_index - curr_col as u16,
-					row: row_index,
-					kind,
-					modifiers,
-				}));
+				return Some((
+					widget_data.0.clone(),
+					widget.mouse_event(MouseEvent {
+						column: column_index - curr_col as u16,
+						row: row_index,
+						kind,
+						modifiers,
+					}),
+				));
 			}
 			curr_col += widget.size().0
 				+ String::from_utf8(strip_ansi_escapes::strip(&suffix).unwrap())

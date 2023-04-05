@@ -189,13 +189,17 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 						syn::Index { index: field_index as u32, span: f.span() },
 					)),
 					// Corresponding enum variant
-					Ident::new(
-						&f.ident
-							.as_ref()
-							.map(|i| i.to_string().to_case(Case::Pascal))
-							.unwrap_or("_".to_owned() + &field_index.to_string()),
-						f.ident.span(),
-					),
+					if attr_details.ignore_mouse_event {
+						None
+					} else {
+						Some(Ident::new(
+							&f.ident
+								.as_ref()
+								.map(|i| i.to_string().to_case(Case::Pascal))
+								.unwrap_or("_".to_owned() + &field_index.to_string()),
+							f.ident.span(),
+						))
+					},
 					// Type
 					f.ty,
 					// Size
@@ -265,11 +269,13 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 	if all_impls.mouse_event == Some(()) {
 		let enum_name = Ident::new(&(ident.to_string() + "MouseEvents"), ident.span());
 
-		let enum_variants = widget_indexes.values().map(|(_, variant, field_type, _)| {
-			quote! {
-				#variant(<#field_type as terminity_widgets::MouseEventWidget>::MouseHandlingResult)
-			}
-		});
+		let enum_variants =
+			widget_indexes.values().map(|(_, variant, field_type, _)| match variant {
+				Some(v) => quote! {
+					#v(<#field_type as terminity_widgets::MouseEventWidget>::MouseHandlingResult),
+				},
+				None => quote!(),
+			});
 
 		let mouse_event_content =
 			layout_body.iter().cloned().enumerate().map(|(line, (prefix, line_parts))| {
@@ -285,25 +291,30 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 							.graphemes(true)
 							.count();
 					let (field, enum_variant, _, _) = &widget_indexes[&name];
-					quote! {
-						if curr_col > column as usize {
-							return None;
-						}
-						if curr_col + self.#field.size().0 > column as usize {
-							return Some(#enum_name::#enum_variant(
-									terminity_widgets::MouseEventWidget::mouse_event(
-										&mut self.#field,
-										crossterm::event::MouseEvent {
-											column: column - curr_col as u16,
-											row,
-											kind,
-											modifiers,
-										}
+					match enum_variant {
+						None => quote! {
+							curr_col += self.#field.size().0 + #suffix_len;
+						},
+						Some(variant) => quote! {
+							if curr_col > column as usize {
+								return None;
+							}
+							if curr_col + self.#field.size().0 > column as usize {
+								return Some(#enum_name::#variant(
+										terminity_widgets::MouseEventWidget::mouse_event(
+											&mut self.#field,
+											crossterm::event::MouseEvent {
+												column: column - curr_col as u16,
+												row,
+												kind,
+												modifiers,
+											}
+										)
 									)
-								)
-							);
-						}
-						curr_col += self.#field.size().0 + #suffix_len;
+								);
+							}
+							curr_col += self.#field.size().0 + #suffix_len;
+						},
 					}
 				});
 				quote!(#line => {
@@ -316,7 +327,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 		expanded.extend(quote! {
 			#[derive(Clone, PartialEq, Eq, Debug)]
 			enum #enum_name {
-				#(#enum_variants,)*
+				#(#enum_variants)*
 			}
 
 			impl #impl_generics terminity_widgets::MouseEventWidget for #ident #ty_generics #where_clause {
