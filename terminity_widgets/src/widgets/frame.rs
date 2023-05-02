@@ -190,7 +190,7 @@ where
 					widget_data.0.clone(),
 					widget.handle_event(MouseEvent {
 						column: column_index - curr_col as u16,
-						row: row_index,
+						row: widget_data.1 as u16,
 						kind,
 						modifiers,
 					}),
@@ -222,7 +222,6 @@ impl<Key, Coll> DerefMut for Frame<Key, Coll> {
 #[cfg(test)]
 mod tests {
 	use crossterm::event::KeyModifiers;
-	use format::lazy_format;
 	use terminity_widgets_proc::{frame, StructFrame};
 
 	use super::*;
