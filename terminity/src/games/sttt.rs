@@ -274,7 +274,7 @@ impl Default for Zone {
 }
 
 /*impl Widget for Zone {
-	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let mut style = ContentStyle::new();
 		if let Some(winner) = self.winner {
 			style.background_color = Some(winner.get_color());
@@ -302,7 +302,7 @@ impl Default for Zone {
 }*/
 
 impl Widget for Zone {
-	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let mut style = ContentStyle::new();
 		if let Some(winner) = self.winner {
 			style.background_color = Some(winner.get_color());
@@ -312,7 +312,7 @@ impl Widget for Zone {
 			style.background_color = Some(Color::Grey);
 			style.foreground_color = style.background_color;
 		}
-		let to_disp = lazy_format!(|fmt| self.values.displ_line(fmt, line)).to_string();
+		let to_disp = self.values.get_line_display(line).to_string();
 		f.write_fmt(format_args!("{}", style.apply(to_disp)))
 	}
 	fn size(&self) -> (usize, usize) {
@@ -383,7 +383,7 @@ impl Display for Tile {
 }
 
 impl Widget for Tile {
-	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		self.fmt(f)
 	}
 	#[inline]

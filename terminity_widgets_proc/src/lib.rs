@@ -155,7 +155,7 @@ pub fn struct_frame(tokens: TokenStream) -> TokenStream {
 /// 	fn size(&self) -> (usize, usize) {
 /// 		(5, 2)
 /// 	}
-/// 	fn displ_line(&self, f: &mut std::fmt::Formatter<'_>, mut line_nb: usize) -> std::fmt::Result {
+/// 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, mut line_nb: usize) -> std::fmt::Result {
 /// 		match line_nb {
 /// 			0 => f.write_str("Hello"),
 /// 			1 => f.write_str("World"),
@@ -182,7 +182,7 @@ pub fn widget_display(tokens: TokenStream) -> TokenStream {
 		impl #impl_generics std::fmt::Display for #name #ty_generics #where_clause {
 			fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 				for i in 0..self.size().1 {
-					self.displ_line(f, i)?;
+					self.display_line(f, i)?;
 					if i != self.size().1 - 1 {
 						f.write_str(&format!("{}\n\r",
 							terminity_widgets::_reexport::Clear(terminity_widgets::_reexport::UntilNewLine)))?;

@@ -10,11 +10,15 @@
 
 */
 
+use std::fmt;
+use std::fmt::Display;
 use std::fmt::Formatter;
+use std::ops::Range;
 
 pub use terminity_widgets_proc::frame;
 pub use terminity_widgets_proc::StructFrame;
 pub use terminity_widgets_proc::WidgetDisplay;
+use unicode_segmentation::UnicodeSegmentation;
 
 pub mod widgets;
 
@@ -23,6 +27,17 @@ pub mod widgets;
 pub mod _reexport {
 	pub use crossterm::terminal::Clear;
 	pub use crossterm::terminal::ClearType::UntilNewLine;
+}
+
+pub struct WidgetLineDisplay<'a, W: Widget + ?Sized> {
+	pub widget: &'a W,
+	pub line: usize,
+}
+
+impl<'a, W: Widget + ?Sized> Display for WidgetLineDisplay<'a, W> {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		self.widget.display_line(f, self.line)
+	}
 }
 
 /// An item displayable on multiple lines, assumed to be a rectangle (though not yet enforced).
@@ -55,10 +70,10 @@ pub trait Widget {
 	/// use format::lazy_format;
 	///
 	/// let text = Text::new(["Hello".into(), "World".into()], 5);
-	/// let formatted = lazy_format!(|f| text.displ_line(f, 1)).to_string();
+	/// let formatted = text.get_line_display(1).to_string();
 	/// assert_eq!(formatted, "World");
 	/// ```
-	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result;
+	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result;
 	/// The current size of the widget, composed of first the width, then the height.
 	///
 	/// ```
@@ -69,6 +84,28 @@ pub trait Widget {
 	/// assert_eq!(text.size(), (5, 2));
 	/// ```
 	fn size(&self) -> (usize, usize);
+
+	fn display_line_in(
+		&self,
+		f: &mut Formatter<'_>,
+		line: usize,
+		bounds: Range<usize>,
+	) -> std::fmt::Result {
+		let output = self.get_line_display(line).to_string();
+		let res: std::fmt::Result =
+			String::from_utf8(strip_ansi_escapes::strip(output).map_err(|_| fmt::Error)?)
+				.unwrap()
+				.graphemes(true)
+				.enumerate()
+				.skip_while(|(i, _)| *i < bounds.start)
+				.map_while(|(i, s)| if i < bounds.end { Some(f.write_str(s)) } else { None })
+				.collect();
+		res
+	}
+
+	fn get_line_display(&self, line: usize) -> WidgetLineDisplay<'_, Self> {
+		WidgetLineDisplay { widget: self, line }
+	}
 }
 
 /// A widget that supports mouse events handling.
@@ -97,7 +134,7 @@ pub trait Widget {
 /// impl Widget for MyWidget {
 /// 	fn size(&self) -> (usize, usize) { (3, 3) }
 /// 	//...
-/// 	# fn displ_line(&self, f: &mut Formatter<'_>, line_nb: usize) -> std::fmt::Result {
+/// 	# fn display_line(&self, f: &mut Formatter<'_>, line_nb: usize) -> std::fmt::Result {
 /// 		# unimplemented!()
 /// 	# }
 /// }

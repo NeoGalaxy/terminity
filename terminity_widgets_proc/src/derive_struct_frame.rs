@@ -240,7 +240,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 			let line_parts = line_parts.into_iter().map(|(((name, _), line_i), suffix)| {
 				let (field, ..) = &widget_indexes[&name];
 				quote! {
-					self.#field.displ_line(f, #line_i)?;
+					self.#field.display_line(f, #line_i)?;
 					f.write_str(#suffix)?;
 				}
 			});
@@ -253,7 +253,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 	let mut expanded = quote! {
 		#(#errors)* // Give the errors
 		impl #impl_generics terminity_widgets::Widget for #ident #ty_generics #where_clause {
-			fn displ_line(&self, f: &mut core::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
+			fn display_line(&self, f: &mut core::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
 				match line {
 					#(#disp_content,)*
 					_ => panic!("Displaying line out of struct frame"),

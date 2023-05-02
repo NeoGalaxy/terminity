@@ -130,11 +130,11 @@ where
 	Coll: Index<Key>,
 	Coll::Output: Widget,
 {
-	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let (begin, widgets_line) = &self.content[line as usize];
 		f.write_str(&begin)?;
 		for ((widget_i, w_line), postfix) in widgets_line {
-			self.widgets[widget_i.clone()].displ_line(f, *w_line)?;
+			self.widgets[widget_i.clone()].display_line(f, *w_line)?;
 			f.write_str(&postfix)?;
 		}
 		Ok(())
@@ -152,7 +152,7 @@ where
 {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		for i in 0..self.size().1 {
-			self.displ_line(f, i)?;
+			self.display_line(f, i)?;
 			if i != self.size().1 - 1 {
 				f.write_str(&format!(
 					"{}\n\r",
@@ -233,7 +233,7 @@ mod tests {
 	}
 
 	impl Widget for Img {
-		fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+		fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 			f.write_str(&self.content[line as usize])
 		}
 		fn size(&self) -> (usize, usize) {
@@ -479,13 +479,13 @@ mod tests {
 			footer: Img { content: vec!["lmnopqrstuv".into()], size: (11, 1), event_res: 5 },
 		};
 
-		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 0)).to_string());
-		assert_eq!("| abcdefghijk |", &lazy_format!(|f| s_frame.displ_line(f, 1)).to_string());
-		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 2)).to_string());
-		assert_eq!("| A 1234567 B |", &lazy_format!(|f| s_frame.displ_line(f, 3)).to_string());
-		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 4)).to_string());
-		assert_eq!("| lmnopqrstuv |", &lazy_format!(|f| s_frame.displ_line(f, 5)).to_string());
-		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 6)).to_string());
+		assert_eq!("*-------------*", &s_frame.get_line_display(0).to_string());
+		assert_eq!("| abcdefghijk |", &s_frame.get_line_display(1).to_string());
+		assert_eq!("|   1234567   |", &s_frame.get_line_display(2).to_string());
+		assert_eq!("| A 1234567 B |", &s_frame.get_line_display(3).to_string());
+		assert_eq!("|   1234567   |", &s_frame.get_line_display(4).to_string());
+		assert_eq!("| lmnopqrstuv |", &s_frame.get_line_display(5).to_string());
+		assert_eq!("*-------------*", &s_frame.get_line_display(6).to_string());
 
 		assert_eq!(
 			s_frame.handle_event(MouseEvent {
@@ -545,13 +545,13 @@ mod tests {
 			Img { content: vec!["lmnopqrstuv".into()], size: (11, 1), event_res: 5 },
 		);
 
-		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 0)).to_string());
-		assert_eq!("| abcdefghijk |", &lazy_format!(|f| s_frame.displ_line(f, 1)).to_string());
-		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 2)).to_string());
-		assert_eq!("| A 1234567 B |", &lazy_format!(|f| s_frame.displ_line(f, 3)).to_string());
-		assert_eq!("|   1234567   |", &lazy_format!(|f| s_frame.displ_line(f, 4)).to_string());
-		assert_eq!("| lmnopqrstuv |", &lazy_format!(|f| s_frame.displ_line(f, 5)).to_string());
-		assert_eq!("*-------------*", &lazy_format!(|f| s_frame.displ_line(f, 6)).to_string());
+		assert_eq!("*-------------*", &s_frame.get_line_display(0).to_string());
+		assert_eq!("| abcdefghijk |", &s_frame.get_line_display(1).to_string());
+		assert_eq!("|   1234567   |", &s_frame.get_line_display(2).to_string());
+		assert_eq!("| A 1234567 B |", &s_frame.get_line_display(3).to_string());
+		assert_eq!("|   1234567   |", &s_frame.get_line_display(4).to_string());
+		assert_eq!("| lmnopqrstuv |", &s_frame.get_line_display(5).to_string());
+		assert_eq!("*-------------*", &s_frame.get_line_display(6).to_string());
 
 		assert_eq!(
 			s_frame.handle_event(MouseEvent {

@@ -32,9 +32,9 @@ use std::ops::DerefMut;
 ///
 /// text[1] = "World".into();
 ///
-/// assert_eq!(lazy_format!(|f| text.displ_line(f, 0)).to_string(), " Hello ");
-/// assert_eq!(lazy_format!(|f| text.displ_line(f, 1)).to_string(), " World ");
-/// assert_eq!(lazy_format!(|f| text.displ_line(f, 2)).to_string(), "       ");
+/// assert_eq!(text.get_line_display(0).to_string(), " Hello ");
+/// assert_eq!(text.get_line_display(1).to_string(), " World ");
+/// assert_eq!(text.get_line_display(2).to_string(), "       ");
 /// ```
 #[derive(WidgetDisplay)]
 pub struct AutoPadder<W: Widget>(
@@ -45,7 +45,7 @@ pub struct AutoPadder<W: Widget>(
 );
 
 impl<W: Widget> Widget for AutoPadder<W> {
-	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let content_size = self.0.size();
 		let total_size = self.1;
 		let top_padding = (total_size.1.saturating_sub(content_size.1)) / 2;
@@ -58,7 +58,7 @@ impl<W: Widget> Widget for AutoPadder<W> {
 			for _ in 0..left_padding {
 				f.write_char(' ')?;
 			}
-			self.0.displ_line(f, line - top_padding)?;
+			self.0.display_line(f, line - top_padding)?;
 			for _ in (left_padding + content_size.0)..(total_size.0) {
 				f.write_char(' ')?;
 			}
