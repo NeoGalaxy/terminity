@@ -29,3 +29,9 @@ Documentations:
  * [terminity](https://docs.rs/terminity)
  * [terminity_widgets](https://docs.rs/terminity_widgets)
  * [terminity_widgets_proc](https://docs.rs/terminity_widgets_proc)
+
+# Licencing
+
+Note that terminity is BSD-4-Clause licensed, but the runtime isn't licensed yet (it will be a
+GPL license). That basically means that you can't modify/distribute the terminity runtime (but you
+are allowed to have it and use it since the sole copyright owner, me, distributes it)
