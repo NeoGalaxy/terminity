@@ -16,9 +16,9 @@ use std::{
 	sync::{Arc, Mutex},
 };
 
-pub mod chess;
-pub mod stratego;
-pub mod sttt;
+// pub mod chess;
+// pub mod stratego;
+// pub mod sttt;
 
 /// A wrapper for any game, that indicate its name.
 pub struct GameWrapper {
@@ -31,23 +31,23 @@ pub struct GameWrapper {
 lazy_static! {
 	/// Registers all the playable games and their names.
 	pub static ref REGISTERY: HashMap<&'static str, GameWrapper> = {
-		let mut m = HashMap::new();
-		m.insert("SuperTicTacToe", GameWrapper {
-			game: Box::new(sttt::SuperTTT()),
-			name: "SuperTicTacToe"
-		}
-		);
+		// let mut m = HashMap::new();
+		// m.insert("SuperTicTacToe", GameWrapper {
+		// 	game: Box::new(sttt::SuperTTT()),
+		// 	name: "SuperTicTacToe"
+		// }
+		// );
 		/*m.insert("Stratego", GameWrapper {
 			game: Box::new(stratego::Stratego()),
 			name: "Stratego"
 		}
 		);*/
-		m.insert("Chess", GameWrapper {
-			game: Box::new(chess::Chess()),
-			name: "Chess"
-		}
-		);
-		m
+		// m.insert("Chess", GameWrapper {
+		// 	game: Box::new(chess::Chess()),
+		// 	name: "Chess"
+		// }
+		// );
+		HashMap::new()
 	};
 }
 

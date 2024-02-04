@@ -17,17 +17,15 @@ expected to work on windows 8 and older, but might work thanks to
 The very long term goals of this project are to to:
 
  1. Make it easier to build good UI in terminal
- 2. Make terminal games accessible to anyone and everyone. This would be through a windows `.exe`
-    and a smartphone app.
+ 2. Make terminal games accessible to anyone and everyone. Maybe even a smartphone app.
  3. Setup a P2P (peer to peer) system allowing to play the games online with anyone, and giving the
 	programmers an API to setup an online (or local offline) game without a mandatory need for a server. 
 
 This project is of course not feasible alone. If you want to support this project in any way,
-anyway from being part of the community to be an active developer, please do!! If enough people are
-interested, a Discord and/or a Subreddit are to expect.
+don't hesitate contacting me ^^
 
 Documentations:
 
- * [terminity](https://docs.rs/terminity/0.1.0/terminity/)
- * [terminity_widgets](https://docs.rs/terminity_widgets/0.1.0/terminity_widgets/)
- * [terminity_widgets_proc](https://docs.rs/terminity_widgets_proc/0.1.0/terminity_widgets_proc/)
+ * [terminity](https://docs.rs/terminity)
+ * [terminity_widgets](https://docs.rs/terminity_widgets)
+ * [terminity_widgets_proc](https://docs.rs/terminity_widgets_proc)

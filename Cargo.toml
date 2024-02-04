@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "terminity",
+    "terminity_runtime",
     "terminity_widgets",
     "terminity_widgets_proc",
 ]

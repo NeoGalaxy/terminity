@@ -1,14 +1,11 @@
 #![warn(missing_docs)]
-
-/*! Widgets for easier terminal UI building.
-
-	This crate revolves around the trait [`Widget`], and defines various [widgets] to help building
-	your own. It also defines various other traits for more transparent usage of the widgets.
-
-	This crate is currently at a very early development stage. The first changes it might have are
-	an api for un-resizeable widgets and more widgets.
-
-*/
+//! Widgets for easier terminal UI building.
+//!
+//! This crate revolves around the trait [`Widget`], and defines various [widgets] to help building
+//! your own. It also defines various other traits for more transparent usage of the widgets.
+//!
+//! This crate is currently at a very early development stage. The first changes it might have are
+//! an api for un-resizeable widgets and more widgets.
 
 use std::fmt;
 use std::fmt::Display;
