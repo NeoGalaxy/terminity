@@ -17,7 +17,7 @@ use crossterm::event::{
 use crossterm::style::{Color as TermColor, ContentStyle};
 use crossterm::{cursor, event, terminal, QueueableCommand};
 use terminity_widgets::widgets::auto_padder::AutoPadder;
-use terminity_widgets::{MouseEventWidget, ResizableWisget, Widget, WidgetDisplay};
+use terminity_widgets::{EventHandleingWidget, ResizableWisget, Widget, WidgetDisplay};
 
 use crate::games::Game;
 pub struct Chess();
@@ -63,7 +63,7 @@ impl Game for Chess {
 					// The wrapping auto-padder filters out the events out of the board
 					// and changes the column and line values to correspond to the position
 					// on the board.
-					if board.mouse_event(e) != Some(true) {
+					if board.handle_event(e) != Some(true) {
 						continue;
 					}
 				}
@@ -332,7 +332,7 @@ impl Widget for Board {
 	fn size(&self) -> (usize, usize) {
 		(18, 9)
 	}
-	fn displ_line(&self, f: &mut std::fmt::Formatter<'_>, mut line_nb: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, mut line_nb: usize) -> std::fmt::Result {
 		if line_nb == 8 {
 			f.write_char(' ')?;
 			f.write_char(' ')?;
@@ -395,9 +395,9 @@ impl Widget for Board {
 	}
 }
 
-impl MouseEventWidget for Board {
-	type MouseHandlingResult = bool;
-	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult {
+impl EventHandleingWidget for Board {
+	type HandledEvent = bool;
+	fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent {
 		// NB: the event will be filtered and re-indexed by the wrapping Auto-Padder
 		let MouseEvent { kind, mut column, mut row, .. } = event;
 		column = column / 2;

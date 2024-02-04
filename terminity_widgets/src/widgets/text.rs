@@ -60,7 +60,7 @@ impl<const H: usize> Text<H> {
 }
 
 impl<const H: usize> Widget for Text<H> {
-	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
 		let width = String::from_utf8(
 			strip_ansi_escapes::strip(&self.content[line]).map_err(|_| fmt::Error)?,
 		)

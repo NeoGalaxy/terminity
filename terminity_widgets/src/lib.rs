@@ -10,10 +10,15 @@
 
 */
 
+use std::fmt;
+use std::fmt::Display;
 use std::fmt::Formatter;
+use std::ops::Range;
 
 pub use terminity_widgets_proc::frame;
+pub use terminity_widgets_proc::StructFrame;
 pub use terminity_widgets_proc::WidgetDisplay;
+use unicode_segmentation::UnicodeSegmentation;
 
 pub mod widgets;
 
@@ -22,6 +27,17 @@ pub mod widgets;
 pub mod _reexport {
 	pub use crossterm::terminal::Clear;
 	pub use crossterm::terminal::ClearType::UntilNewLine;
+}
+
+pub struct WidgetLineDisplay<'a, W: Widget + ?Sized> {
+	pub widget: &'a W,
+	pub line: usize,
+}
+
+impl<'a, W: Widget + ?Sized> Display for WidgetLineDisplay<'a, W> {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		self.widget.display_line(f, self.line)
+	}
 }
 
 /// An item displayable on multiple lines, assumed to be a rectangle (though not yet enforced).
@@ -54,10 +70,10 @@ pub trait Widget {
 	/// use format::lazy_format;
 	///
 	/// let text = Text::new(["Hello".into(), "World".into()], 5);
-	/// let formatted = lazy_format!(|f| text.displ_line(f, 1)).to_string();
+	/// let formatted = text.get_line_display(1).to_string();
 	/// assert_eq!(formatted, "World");
 	/// ```
-	fn displ_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result;
+	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result;
 	/// The current size of the widget, composed of first the width, then the height.
 	///
 	/// ```
@@ -68,6 +84,28 @@ pub trait Widget {
 	/// assert_eq!(text.size(), (5, 2));
 	/// ```
 	fn size(&self) -> (usize, usize);
+
+	fn display_line_in(
+		&self,
+		f: &mut Formatter<'_>,
+		line: usize,
+		bounds: Range<usize>,
+	) -> std::fmt::Result {
+		let output = self.get_line_display(line).to_string();
+		let res: std::fmt::Result =
+			String::from_utf8(strip_ansi_escapes::strip(output).map_err(|_| fmt::Error)?)
+				.unwrap()
+				.graphemes(true)
+				.enumerate()
+				.skip_while(|(i, _)| *i < bounds.start)
+				.map_while(|(i, s)| if i < bounds.end { Some(f.write_str(s)) } else { None })
+				.collect();
+		res
+	}
+
+	fn get_line_display(&self, line: usize) -> WidgetLineDisplay<'_, Self> {
+		WidgetLineDisplay { widget: self, line }
+	}
 }
 
 /// A widget that supports mouse events handling.
@@ -77,8 +115,8 @@ pub trait Widget {
 /// it may manage it itself or pass it on to a child widget by adapting the coordinates of the mouse
 /// event.
 ///
-/// Be careful: when a parent widget implements Deref, it might still implement MouseEventWidget,
-/// meaning that calling `.mouse_event` will call the parent's implementation and not the child's
+/// Be careful: when a parent widget implements Deref, it might still implement EventHandleingWidget,
+/// meaning that calling `.handle_event` will call the parent's implementation and not the child's
 /// one. This is intended behaviour and designed to make code easier to write and read, assuming
 /// both knows this behaviour.
 ///
@@ -88,7 +126,7 @@ pub trait Widget {
 /// use std::fmt::Formatter;
 /// use terminity_widgets::widgets::auto_padder::AutoPadder;
 /// use crossterm::event::{MouseEvent, MouseEventKind, KeyModifiers};
-/// use terminity_widgets::{Widget, MouseEventWidget};
+/// use terminity_widgets::{Widget, EventHandleingWidget};
 ///
 /// // Defining a custom widget of size `(3, 3)`
 /// // that returns the obtained coordinates on a mouse event
@@ -96,14 +134,14 @@ pub trait Widget {
 /// impl Widget for MyWidget {
 /// 	fn size(&self) -> (usize, usize) { (3, 3) }
 /// 	//...
-/// 	# fn displ_line(&self, f: &mut Formatter<'_>, line_nb: usize) -> std::fmt::Result {
+/// 	# fn display_line(&self, f: &mut Formatter<'_>, line_nb: usize) -> std::fmt::Result {
 /// 		# unimplemented!()
 /// 	# }
 /// }
-/// impl MouseEventWidget for MyWidget {
-/// 	type MouseHandlingResult = (usize, usize);
+/// impl EventHandleingWidget for MyWidget {
+/// 	type HandledEvent = (usize, usize);
 /// 	// Returns the obtained coordinates
-/// 	fn mouse_event(&mut self, event: MouseEvent) -> Self::MouseHandlingResult {
+/// 	fn handle_event(&mut self, event: MouseEvent) -> Self::HandledEvent {
 /// 		(event.row as usize, event.column as usize)
 /// 	}
 /// }
@@ -128,16 +166,16 @@ pub trait Widget {
 /// };
 ///
 /// // (0, 0) is outside of the child, so AutoPadder returns None.
-/// assert_eq!(my_widget.mouse_event(event0), None);
+/// assert_eq!(my_widget.handle_event(event0), None);
 ///
 /// // (2, 2) is inside of the child, AutoPadder bubbles the event by adapting the coordinates.
-/// assert_eq!(my_widget.mouse_event(event1), Some((1, 1)));
+/// assert_eq!(my_widget.handle_event(event1), Some((1, 1)));
 /// ```
-pub trait MouseEventWidget: Widget {
-	/// The type of the return value of the `mouse_event` call.
-	type MouseHandlingResult;
+pub trait EventHandleingWidget: Widget {
+	/// The type of the return value of the `handle_event` call.
+	type HandledEvent;
 	/// Handles a mouse event. see the [trait](Self)'s doc for more details.
-	fn mouse_event(&mut self, event: crossterm::event::MouseEvent) -> Self::MouseHandlingResult;
+	fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent;
 }
 
 /// A widget that supports resizing.

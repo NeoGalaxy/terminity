@@ -218,7 +218,13 @@ pub fn parse_frame_lines<'a>(
 
 	let mut next_uid = 0;
 	// char to match, uid, start, end, current line
-	let mut last_indexes: Vec<(char, usize, (usize, usize), usize)> = vec![];
+	let mut last_indexes: Vec<(
+		char,
+		usize,
+		(usize, usize),
+		usize,
+		(&RefCell<Option<(usize, usize)>>, bool),
+	)> = vec![];
 	for line in content {
 		let line_content = line.value();
 		// Check full width of frame
@@ -241,10 +247,10 @@ pub fn parse_frame_lines<'a>(
 		// Get the list of index of widget on current line
 		let mut indexes = widgets_names
 			.iter()
-			.flat_map(|(name, widgets_size)| {
+			.flat_map(|(name, widget_size)| {
 				let name = *name;
 				// List of all the places in the string where there is the widget of char `name`
-				let mut res: Vec<(char, usize, (usize, usize), usize)> = vec![];
+				let mut res: Vec<(char, usize, (usize, usize), usize, _)> = vec![];
 				// Substring that hasn't been checked yet
 				let mut substr = &line_content[..];
 				// The index at which the above substring starts in `line_content`
@@ -253,7 +259,7 @@ pub fn parse_frame_lines<'a>(
 				// Find next occurence of the char to match
 				while let Some(mut start_index) = substr.find(name) {
 					// getting `end_index` relatively to `start_index`
-					let mut end_index = match *widgets_size.borrow_mut() {
+					let mut end_index = match *widget_size.borrow_mut() {
 						// If current widget has pre-defined width, then use it
 						Some((w, _)) => {
 							let widget_section = &substr[start_index..(start_index + w)];
@@ -292,11 +298,11 @@ pub fn parse_frame_lines<'a>(
 
 					// Get details of this same span on the line above
 					let above = last_indexes
-						.binary_search_by(|(_, _, (start, end), _)| {
+						.binary_search_by(|(_, _, (start, end), _, _)| {
 							if (start_index..end_index).contains(start)
-								|| (start_index..end_index).contains(end)
+								|| (start_index..end_index).contains(&(end - 1))
 								|| (*start..*end).contains(&start_index)
-								|| (*start..*end).contains(&end_index)
+								|| (*start..*end).contains(&(end_index - 1))
 							{
 								Ordering::Equal
 							} else {
@@ -304,23 +310,24 @@ pub fn parse_frame_lines<'a>(
 							}
 						})
 						.ok()
-						.map(|v| &last_indexes[v]);
+						.map(|v| &mut last_indexes[v]);
 					// Check if the line above matches and generate the accurate vertical index.
 					let (widget_y_index, uid) = match above {
 						None => {
 							next_uid += 1;
 							(0, next_uid - 1)
 						}
-						Some((last_name, last_uid, (start, end), y_index)) => {
+						Some((last_name, last_uid, (start, end), y_index, (_, matched))) => {
 							// if there's some kind of issue, then we start a brand new display
-							if widgets_size.borrow().map_or(false, |(_, h)| h == y_index + 1)
+							if widget_size.borrow().map_or(false, |(_, h)| h == *y_index + 1)
 								|| *last_name != name || *start != start_index
 								|| *end != end_index
 							{
 								next_uid += 1;
 								(0, next_uid - 1)
 							} else {
-								(y_index + 1, *last_uid)
+								*matched = true;
+								(*y_index + 1, *last_uid)
 							}
 						}
 					};
@@ -328,19 +335,56 @@ pub fn parse_frame_lines<'a>(
 					// Prepare next iteration
 					substr_index = end_index;
 					substr = &line_content[substr_index..];
-					res.push((name, uid, (start_index, end_index), widget_y_index));
+					res.push((
+						name,
+						uid,
+						(start_index, end_index),
+						widget_y_index,
+						(*widget_size, false),
+					));
 				}
 				res
 			})
 			.collect::<Vec<_>>();
-		indexes.sort_unstable_by_key(|(_, _, i, _)| *i);
+		indexes.sort_unstable_by_key(|(_, _, i, _, _)| *i);
+
+		// check size
+		for (l_name, _, (start, end), y_index, (size, matched)) in last_indexes {
+			if matched {
+				continue;
+			}
+			let borrowed = size.borrow();
+			if let Some((w, h)) = *borrowed {
+				if y_index + 1 != h {
+					errors.push(Diagnostic::spanned(
+						line.span(),
+						Level::Error,
+						format!("Invalid height for widget of layout name {l_name:?}: expected {}, got {}.",
+						h,
+						y_index + 1)
+					));
+				}
+				if w != end - start {
+					errors.push(Diagnostic::spanned(
+						line.span(),
+						Level::Error,
+						format!("Invalid width for widget of layout name {l_name:?}: expected {}, got {}.",
+						w,
+						end - start)
+					));
+				}
+			} else {
+				drop(borrowed);
+				*size.borrow_mut() = Some((end - start, y_index + 1))
+			}
+		}
 
 		//let _ = check_heights(&last_indexes, &indexes, &mut content_height, &last_line.unwrap());
 
 		// Make (widget, suffix) pairs from the end of the line
 		let mut last_index = line_content.len();
 		let mut line_res = vec![];
-		for (widget, uid, (line_index, line_end), line_height) in indexes.iter().rev() {
+		for (widget, uid, (line_index, line_end), line_height, _) in indexes.iter().rev() {
 			//let width = content_width.unwrap();
 			line_res.push((
 				((widget.clone(), *uid), line_height.clone()),
@@ -357,9 +401,28 @@ pub fn parse_frame_lines<'a>(
 		last_indexes = indexes;
 		//last_line = Some(line);
 	}
+
+	for (l_name, _, _, y_index, (size, matched)) in last_indexes {
+		if matched {
+			continue;
+		}
+		if let Some((_, h)) = *size.borrow() {
+			if y_index + 1 != h {
+				errors.push(Diagnostic::spanned(
+					content.last().expect("impossible: content can't be empty").span(),
+					Level::Error,
+					format!(
+						"Invalid height for widget of layout name {l_name:?}: expected {}, got {}.",
+						h,
+						y_index + 1
+					),
+				));
+			}
+		}
+	}
 	// TODO: check height of last_indexes
 	//let _ = check_heights(&last_indexes, &[], &mut content_height, &last_line.unwrap());
-	/*match widgets_size {
+	/*match widget_size {
 		None => (),
 		Some(s) => {
 			for i in last_indexes {
@@ -823,6 +886,21 @@ mod tests {
 			r"| aa |"
 			r"| aa |"
 			r"\====/"
+		)
+		.into();
+		let res = run(syn::parse2(frame_def).unwrap());
+		println!("{:?}", res.1);
+		assert_eq!(res.1.len(), 1);
+	}
+
+	#[test]
+	fn consistant_sizes() {
+		let frame_def: proc_macro2::TokenStream = quote!(
+			values => {repeat 'a': 0..}
+			r"/=========\"
+			r"| aa  aaa |"
+			r"| aa  aaa |"
+			r"\=========/"
 		)
 		.into();
 		let res = run(syn::parse2(frame_def).unwrap());
