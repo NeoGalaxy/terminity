@@ -5,10 +5,8 @@ authors = ["Naeio <naeiogalaxy@gmail.com>"]
 edition = "2021"
 description = "Runtime to run terminity projects"
 readme = "../README.md"
-#homepage = 
 repository = "https://github.com/NeoGalaxy/terminity"
-license = "BSD-4-Clause"
-#license-file = "../LICENSE"
+license = "UNLICENSED"
 keywords = ["TUI", "UI", "terminal", "game-development"]
 categories = ["game-development", "games"]
 
@@ -16,7 +14,8 @@ categories = ["game-development", "games"]
 
 [dependencies]
 terminity = { version = "0.1", path = "../terminity" }
+terminity_widgets = { version = "0.1", path = "../terminity_widgets" }
 crossterm = { version = "0.26", features = ["event-stream"] }
 rand = "0.8.5"
-structopt = "0.3"
-lazy_static = "1.4"
+clap = { version = "4.4", features = ["derive"] }
+libloading = "0.8"

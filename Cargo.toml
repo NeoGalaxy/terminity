@@ -4,4 +4,6 @@ members = [
     "terminity_runtime",
     "terminity_widgets",
     "terminity_widgets_proc",
+
+    "terminity/examples/hello_world",
 ]

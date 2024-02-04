@@ -8,7 +8,6 @@ readme = "README.md"
 #homepage = 
 repository = "https://github.com/NeoGalaxy/terminity"
 license = "BSD-4-Clause"
-#license-file = "../LICENSE"
 keywords = ["proc-macro", "terminity_widgets"]
 categories = ["game-development", "games"]
 

@@ -34,14 +34,12 @@
 
 // #![warn(missing_docs)]
 
-use std::fmt::Write as _;
 use std::mem::size_of;
-use std::ptr::null_mut;
-use std::{fmt::Display, fs::File, io};
-use std::{ptr, slice};
+use std::{fmt::Display, io};
 
+pub use bincode as _bincode;
 use serde::{Deserialize, Serialize};
-use terminity_widgets::widgets;
+
 pub use terminity_widgets::Widget;
 
 pub mod games;
@@ -59,7 +57,7 @@ pub struct EventReader<'a> {
 }
 
 impl<'a> EventReader<'a> {
-	fn new(events: &'a [u8]) -> Self {
+	pub fn new(events: &'a [u8]) -> Self {
 		Self { slice: events, pos: 0 }
 	}
 }
@@ -87,117 +85,118 @@ impl EventPoller for EventReader<'_> {}
 pub trait Game {
 	type DataInput: for<'a> Deserialize<'a>;
 	type DataOutput: Serialize;
+	type WidgetKind: Widget;
 
 	fn start<R: io::Read>(data: Option<Self::DataInput>) -> Self;
 
-	fn disp<F: FnOnce(&dyn Widget)>(&mut self, displayer: F);
+	fn disp<F: FnOnce(&Self::WidgetKind)>(&mut self, displayer: F);
 
 	fn update<E: EventPoller>(&mut self, events: E);
 
 	fn finish(self) -> Option<Self::DataOutput>;
 }
 
-impl Game for HelloWorld {
-	type DataInput = ();
-	type DataOutput = ();
-
-	fn start<R: io::Read>(_data: Option<Self::DataInput>) -> Self {
-		HelloWorld()
-	}
-
-	fn disp<F: FnOnce(&dyn Widget)>(&mut self, displayer: F) {
-		displayer(&widgets::text::Text::new(["Hello world!".into()], 10))
-	}
-
-	fn update<E: EventPoller>(&mut self, _: E) {}
-
-	fn finish(self) -> Option<Self::DataOutput> {
-		None
-	}
+#[repr(C)]
+pub struct GameData {
+	pub content: *mut u8,
+	pub size: u32,
+	pub capacity: u32,
 }
 
-struct HelloWorld();
+#[derive(Debug)]
+#[repr(C)]
+pub struct WidgetBuffer {
+	pub width: u32,
+	pub height: u32,
+	pub content: *const u8,
+}
 
-static mut GAME: Option<HelloWorld> = None;
-static mut BUFFER: Option<String> = None;
-
-struct LineDisp<'a, W: Widget + ?Sized>(usize, &'a W);
+pub struct LineDisp<'a, W: Widget + ?Sized>(pub usize, pub &'a W);
 impl<W: Widget + ?Sized> Display for LineDisp<'_, W> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		self.1.display_line(f, self.0)
 	}
 }
 
-#[repr(C)]
-pub struct GameData {
-	content: *mut u8,
-	size: u32,
-	capacity: u32,
-}
+#[macro_export]
+macro_rules! build_game {
+	($GAME: ident) => {
+		mod _game_definition {
+			use super::$GAME;
+			use std::fmt::Write as _;
 
-#[repr(C)]
-pub struct WidgetBuffer {
-	width: u32,
-	height: u32,
-	content: *const u8,
-}
+			static mut GAME: Option<$GAME> = None;
+			static mut BUFFER: Option<String> = None;
 
-#[no_mangle]
-pub unsafe extern "C" fn start_game(data: GameData) {
-	let data = if data.content.is_null() {
-		None
-	} else {
-		let data_vec =
-			Vec::from_raw_parts(data.content, data.size as usize, data.capacity as usize);
-		Some(bincode::deserialize::<<HelloWorld as Game>::DataInput>(&data_vec))
-	};
-	unsafe { BUFFER = Some(String::with_capacity(32)) }
-	unsafe { GAME = Some(<HelloWorld as Game>::start::<File>(None)) }
-}
+			#[no_mangle]
+			pub unsafe extern "C" fn start_game(data: $crate::GameData) {
+				let data = if data.content.is_null() {
+					None
+				} else {
+					let data_vec = Vec::from_raw_parts(
+						data.content,
+						data.size as usize,
+						data.capacity as usize,
+					);
+					Some($crate::_bincode::deserialize::<<$GAME as $crate::Game>::DataInput>(
+						&data_vec,
+					))
+				};
+				unsafe { BUFFER = Some(String::with_capacity(32)) }
+				unsafe { GAME = Some(<$GAME as $crate::Game>::start::<std::fs::File>(None)) }
+			}
 
-#[no_mangle]
-pub extern "C" fn disp_game() -> WidgetBuffer {
-	let buffer = unsafe { BUFFER.as_mut() }.unwrap();
-	let game = unsafe { GAME.as_mut() }.unwrap();
-	let mut res = WidgetBuffer { width: 0, height: 0, content: ptr::null() };
-	Game::disp(game, |w| {
-		let (width, height) = w.size();
-		buffer.clear();
-		buffer.reserve_exact((width + 1) * height);
-		for line in 0..height {
-			write!(buffer, "{}", LineDisp(line, w)).unwrap()
+			#[no_mangle]
+			pub extern "C" fn disp_game() -> $crate::WidgetBuffer {
+				let buffer = unsafe { BUFFER.as_mut() }.unwrap();
+				let game = unsafe { GAME.as_mut() }.unwrap();
+				let mut res =
+					$crate::WidgetBuffer { width: 0, height: 0, content: std::ptr::null() };
+				$crate::Game::disp(game, |w| {
+					let (width, height) = $crate::Widget::size(w);
+					buffer.clear();
+					buffer.reserve_exact((width + 1) * height);
+					for line in 0..height {
+						write!(buffer, "{}", $crate::LineDisp(line, w)).unwrap()
+					}
+					res = $crate::WidgetBuffer {
+						width: width as u32,
+						height: height as u32,
+						content: buffer.as_ptr(),
+					};
+				});
+				res
+			}
+
+			#[no_mangle]
+			pub unsafe extern "C" fn update_game(events: *const u8, size: u32) {
+				let events = unsafe { std::slice::from_raw_parts(events, size as usize) };
+				let evt_reader = $crate::EventReader::new(events);
+				let game = unsafe { GAME.as_mut() }.unwrap();
+				$crate::Game::update(game, evt_reader);
+			}
+
+			#[no_mangle]
+			pub extern "C" fn close_game() -> $crate::GameData {
+				let game = unsafe { GAME.take() }.unwrap();
+				if let Some(game_state) = $crate::Game::finish(game) {
+					let mut data = $crate::_bincode::serialize(&game_state).unwrap();
+					let capacity = data.capacity();
+					let size = data.len();
+					let content = data.as_mut_ptr();
+					$crate::GameData { content, size: size as u32, capacity: capacity as u32 }
+				} else {
+					$crate::GameData { content: std::ptr::null_mut(), size: 0, capacity: 0 }
+				}
+			}
+
+			#[no_mangle]
+			pub unsafe extern "C" fn deallocate_data(data: $crate::GameData) {
+				if !data.content.is_null() {
+					// convert to deallocate
+					Vec::from_raw_parts(data.content, data.size as usize, data.capacity as usize);
+				}
+			}
 		}
-		res = WidgetBuffer { width: width as u32, height: height as u32, content: buffer.as_ptr() };
-	});
-	res
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn update_game(events: *const u8, size: u32) {
-	let events = unsafe { slice::from_raw_parts(events, size as usize) };
-	let evt_reader = EventReader::new(events);
-	let game = unsafe { GAME.as_mut() }.unwrap();
-	Game::update(game, evt_reader);
-}
-
-#[no_mangle]
-pub extern "C" fn close_game() -> GameData {
-	let game = unsafe { GAME.take() }.unwrap();
-	if let Some(game_state) = Game::finish(game) {
-		let mut data = bincode::serialize(&game_state).unwrap();
-		let capacity = data.capacity();
-		let size = data.len();
-		let content = data.as_mut_ptr();
-		GameData { content, size: size as u32, capacity: capacity as u32 }
-	} else {
-		GameData { content: null_mut(), size: 0, capacity: 0 }
-	}
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn deallocate_data(data: GameData) {
-	if !data.content.is_null() {
-		// convert to deallocate
-		Vec::from_raw_parts(data.content, data.size as usize, data.capacity as usize);
-	}
+	};
 }
