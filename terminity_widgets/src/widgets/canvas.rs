@@ -109,12 +109,12 @@ impl<E: EventHandleingWidget, BG: EventHandleingWidget> EventHandleingWidget for
 				}));
 			}
 		}
-		return CanvasEvent::Background(self.background.handle_event(MouseEvent {
+		CanvasEvent::Background(self.background.handle_event(MouseEvent {
 			row,
 			column,
 			kind,
 			modifiers,
-		}));
+		}))
 	}
 }
 

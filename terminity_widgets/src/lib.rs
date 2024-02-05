@@ -1,4 +1,5 @@
-#![warn(missing_docs)]
+#![allow(clippy::tabs_in_doc_comments)]
+// #![warn(missing_docs)]
 //! Widgets for easier terminal UI building.
 //!
 //! This crate revolves around the trait [`Widget`], and defines various [widgets] to help building

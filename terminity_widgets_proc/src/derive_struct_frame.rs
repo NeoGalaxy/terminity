@@ -93,34 +93,26 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				.into(),
 			));
 		}
-		return (quote!().into(), errors);
+		return (quote!(), errors);
 	} else {
 		let layout_content: LayoutArgs = match parse2(layout[0].tokens.clone()) {
 			Ok(v) => v,
 			Err(e) => {
 				errors.push(e.into());
-				return (quote!().into(), errors);
+				return (quote!(), errors);
 			}
 		};
-		let all_impls = if impls.len() == 0 {
+		let all_impls = if impls.is_empty() {
 			None
 		} else {
 			match impls[0].parse_meta().map(|m| SFImplArgs::from_meta(&m)) {
 				Ok(Ok(v)) => Some(v),
 				Ok(Err(e)) => {
-					errors.push(Diagnostic::spanned(
-						e.span(),
-						Level::Error,
-						format!("{}", e).into(),
-					));
+					errors.push(Diagnostic::spanned(e.span(), Level::Error, format!("{}", e)));
 					None
 				}
 				Err(e) => {
-					errors.push(Diagnostic::spanned(
-						e.span(),
-						Level::Error,
-						format!("{}", e).into(),
-					));
+					errors.push(Diagnostic::spanned(e.span(), Level::Error, format!("{}", e)));
 					None
 				}
 			}
@@ -205,7 +197,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 					// Size
 					RefCell::new(None),
 				);
-				if let Some(_) = res.insert(attr_details.name.value(), details) {
+				if res.insert(attr_details.name.value(), details).is_some() {
 					errors.push(Diagnostic::spanned(
 						attr_details.name.span(),
 						Level::Error,
@@ -280,13 +272,13 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 		let mouse_event_content =
 			layout_body.iter().cloned().enumerate().map(|(line, (prefix, line_parts))| {
 				let prefix_len =
-					String::from_utf8(strip_ansi_escapes::strip(&prefix.value()).unwrap())
+					String::from_utf8(strip_ansi_escapes::strip(prefix.value()).unwrap())
 						.unwrap()
 						.graphemes(true)
 						.count();
 				let line_parts = line_parts.into_iter().map(|(((name, _), _line_i), suffix)| {
 					let suffix_len =
-						String::from_utf8(strip_ansi_escapes::strip(&suffix.value()).unwrap())
+						String::from_utf8(strip_ansi_escapes::strip(suffix.value()).unwrap())
 							.unwrap()
 							.graphemes(true)
 							.count();

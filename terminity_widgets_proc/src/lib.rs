@@ -1,3 +1,4 @@
+#![allow(clippy::tabs_in_doc_comments)]
 #![warn(missing_docs)]
 
 /*! Crate defining the procedural macros for

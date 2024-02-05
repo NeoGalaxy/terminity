@@ -1,3 +1,5 @@
+#![allow(clippy::tabs_in_doc_comments)]
+
 //! Crate to register multiple terminal games, allow to choose a game and set up an environment
 //! to run them. This is at an extremely early development stage.
 //!
@@ -34,53 +36,22 @@
 
 // #![warn(missing_docs)]
 
-use std::mem::size_of;
 use std::{fmt::Display, io};
 
 pub use bincode as _bincode;
+use events::EventPoller;
 use serde::{Deserialize, Serialize};
 
 pub use terminity_widgets::Widget;
 
+pub mod events;
 pub mod games;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Event {
-	Blblbl,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Size {
+	width: u16,
+	height: u16,
 }
-
-pub trait EventPoller: Iterator<Item = Event> {}
-
-pub struct EventReader<'a> {
-	slice: &'a [u8],
-	pos: usize,
-}
-
-impl<'a> EventReader<'a> {
-	pub fn new(events: &'a [u8]) -> Self {
-		Self { slice: events, pos: 0 }
-	}
-}
-
-impl Iterator for EventReader<'_> {
-	type Item = Event;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		if self.pos == self.slice.len() {
-			return None;
-		}
-		let size = u16::from_le_bytes(
-			self.slice[self.pos..self.pos + size_of::<u16>()].try_into().unwrap(),
-		) as usize;
-
-		self.pos += size_of::<u16>() + size;
-		let evt_slice = &self.slice[self.pos - size..self.pos];
-
-		Some(bincode::deserialize(evt_slice).unwrap())
-	}
-}
-
-impl EventPoller for EventReader<'_> {}
 
 pub trait Game {
 	type DataInput: for<'a> Deserialize<'a>;
@@ -126,7 +97,8 @@ macro_rules! build_game {
 			use std::fmt::Write as _;
 
 			static mut GAME: Option<$GAME> = None;
-			static mut BUFFER: Option<String> = None;
+			static mut DISP_BUFFER: Option<String> = None;
+			static mut CMD_BUFFER: Option<Vec<u8>> = None;
 
 			#[no_mangle]
 			pub unsafe extern "C" fn start_game(data: $crate::GameData) {
@@ -142,13 +114,14 @@ macro_rules! build_game {
 						&data_vec,
 					))
 				};
-				unsafe { BUFFER = Some(String::with_capacity(32)) }
+				unsafe { DISP_BUFFER = Some(String::with_capacity(32)) }
+				unsafe { CMD_BUFFER = Some(Vec::new()) }
 				unsafe { GAME = Some(<$GAME as $crate::Game>::start::<std::fs::File>(None)) }
 			}
 
 			#[no_mangle]
 			pub extern "C" fn disp_game() -> $crate::WidgetBuffer {
-				let buffer = unsafe { BUFFER.as_mut() }.unwrap();
+				let buffer = unsafe { DISP_BUFFER.as_mut() }.unwrap();
 				let game = unsafe { GAME.as_mut() }.unwrap();
 				let mut res =
 					$crate::WidgetBuffer { width: 0, height: 0, content: std::ptr::null() };
@@ -169,11 +142,16 @@ macro_rules! build_game {
 			}
 
 			#[no_mangle]
-			pub unsafe extern "C" fn update_game(events: *const u8, size: u32) {
+			pub unsafe extern "C" fn update_game(
+				events: *const u8,
+				size: u32,
+			) -> $crate::events::TerminityCommandsData {
 				let events = unsafe { std::slice::from_raw_parts(events, size as usize) };
-				let evt_reader = $crate::EventReader::new(events);
+				let commands_buffer = unsafe { CMD_BUFFER.take().unwrap() };
+				let mut evt_reader = $crate::events::EventReader::new(events, commands_buffer);
 				let game = unsafe { GAME.as_mut() }.unwrap();
-				$crate::Game::update(game, evt_reader);
+				$crate::Game::update(game, &mut evt_reader);
+				evt_reader.into_commands_data()
 			}
 
 			#[no_mangle]
@@ -191,7 +169,20 @@ macro_rules! build_game {
 			}
 
 			#[no_mangle]
-			pub unsafe extern "C" fn deallocate_data(data: $crate::GameData) {
+			pub unsafe extern "C" fn free_command_buffer(
+				buff: $crate::events::TerminityCommandsData,
+			) {
+				unsafe {
+					CMD_BUFFER = Some(Vec::from_raw_parts(
+						buff.content,
+						buff.len as usize,
+						buff.capacity as usize,
+					))
+				}
+			}
+
+			#[no_mangle]
+			pub unsafe extern "C" fn free_game_data(data: $crate::GameData) {
 				if !data.content.is_null() {
 					// convert to deallocate
 					Vec::from_raw_parts(data.content, data.size as usize, data.capacity as usize);

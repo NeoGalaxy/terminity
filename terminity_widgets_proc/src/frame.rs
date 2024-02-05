@@ -136,7 +136,7 @@ impl Parse for FrameWidgetIndex {
 	fn parse(input: ParseStream) -> syn::Result<Self> {
 		if input.peek(Ident) {
 			let repeat: Ident = input.parse()?;
-			if repeat.to_string() != "repeat" {
+			if repeat != "repeat" {
 				return Err(syn::Error::new(repeat.span(), "Expected a char or 'repreat'"));
 			}
 			let name = input.parse()?;
@@ -170,14 +170,14 @@ impl Parse for FrameMacro {
 			let value = input.parse()?;
 			let size = if input.peek(Ident) {
 				let of: Ident = input.parse()?;
-				if of.to_string() != "of" {
+				if of != "of" {
 					return Err(syn::Error::new(
 						of.span(),
 						"Expecting a size description ('of size<w, h>') or the token '=>'",
 					));
 				}
 				let size: Ident = input.parse()?;
-				if size.to_string() != "size" {
+				if size != "size" {
 					return Err(syn::Error::new(
 						size.span(),
 						"Expecting a size description ('of size<w, h>')",
@@ -387,7 +387,7 @@ pub fn parse_frame_lines<'a>(
 		for (widget, uid, (line_index, line_end), line_height, _) in indexes.iter().rev() {
 			//let width = content_width.unwrap();
 			line_res.push((
-				((widget.clone(), *uid), line_height.clone()),
+				((*widget, *uid), *line_height),
 				LitStr::new(&line_content[*line_end..last_index], line.span()),
 			));
 			last_index = *line_index;
@@ -463,7 +463,9 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 					Pair::End(w) => (w, None),
 				};
 				res.push_value(&wi.expr);
-				punct.map(|p| res.push_punct(p));
+				if let Some(p) = punct {
+					res.push_punct(p)
+				}
 			}
 			quote!([#res])
 		}
