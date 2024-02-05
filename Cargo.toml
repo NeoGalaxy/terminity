@@ -5,4 +5,5 @@ members = [
     "terminity_proc",
 
     "terminity/examples/hello_world",
+    "terminity/examples/chess",
 ]

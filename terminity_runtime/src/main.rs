@@ -23,9 +23,10 @@ use std::{
 };
 use terminity::{
 	events::{CommandEvent, Event, KeyCode, KeyModifiers, KeyPress, TerminityCommandsData},
-	GameData, Widget, WidgetBuffer,
+	game::GameData,
+	widgets::Widget,
+	WidgetBuffer, WidgetDisplay,
 };
-use terminity_widgets::WidgetDisplay;
 
 #[derive(Parser)]
 struct Args {
