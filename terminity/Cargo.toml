@@ -15,7 +15,6 @@ categories = ["game-development", "games"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-terminity_widgets = { version = "0.1", path = "../terminity_widgets" }
 crossterm = { version = "0.26", features = ["event-stream"] }
 rand = "0.8.5"
 structopt = "0.3"
@@ -23,3 +22,11 @@ lazy_static = "1.4"
 byteorder = "1.5.0"
 bincode = "1.3.3"
 serde = {version = "1.0", features = ["derive"]}
+
+# for widgets
+terminity_proc = { version = "0.1", path = "../terminity_proc" }
+unicode-segmentation = "1.10"
+strip-ansi-escapes = "0.1"
+
+[dev-dependencies]
+format = "0.2.4"

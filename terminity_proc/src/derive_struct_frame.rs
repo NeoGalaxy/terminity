@@ -244,7 +244,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 
 	let mut expanded = quote! {
 		#(#errors)* // Give the errors
-		impl #impl_generics terminity_widgets::Widget for #ident #ty_generics #where_clause {
+		impl #impl_generics terminity::widgets::Widget for #ident #ty_generics #where_clause {
 			fn display_line(&self, f: &mut core::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
 				match line {
 					#(#disp_content,)*
@@ -264,7 +264,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 		let enum_variants =
 			widget_indexes.values().map(|(_, variant, field_type, _)| match variant {
 				Some(v) => quote! {
-					#v(<#field_type as terminity_widgets::EventHandleingWidget>::HandledEvent),
+					#v(<#field_type as terminity::widgets::EventHandleingWidget>::HandledEvent),
 				},
 				None => quote!(),
 			});
@@ -293,7 +293,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 							}
 							if curr_col + self.#field.size().0 > column as usize {
 								return Some(#enum_name::#variant(
-										terminity_widgets::EventHandleingWidget::handle_event(
+										terminity::widgets::EventHandleingWidget::handle_event(
 											&mut self.#field,
 											crossterm::event::MouseEvent {
 												column: column - curr_col as u16,
@@ -322,7 +322,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				#(#enum_variants)*
 			}
 
-			impl #impl_generics terminity_widgets::EventHandleingWidget for #ident #ty_generics #where_clause {
+			impl #impl_generics terminity::widgets::EventHandleingWidget for #ident #ty_generics #where_clause {
 				type HandledEvent = Option<#enum_name>;
 				fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent {
 					let crossterm::event::MouseEvent { column, row, kind, modifiers } = event;

@@ -1,9 +1,8 @@
 //! Defines the [AutoPadder] widget.
 use crossterm::event::MouseEvent;
 
-use crate as terminity_widgets;
-use crate::EventHandleingWidget;
-use crate::ResizableWisget;
+use crate::widgets::EventHandleingWidget;
+use crate::widgets::ResizableWisget;
 use crate::Widget;
 use crate::WidgetDisplay;
 

@@ -332,7 +332,11 @@ impl Widget for Board {
 	fn size(&self) -> (usize, usize) {
 		(18, 9)
 	}
-	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, mut line_nb: usize) -> std::fmt::Result {
+	fn display_line(
+		&self,
+		f: &mut std::fmt::Formatter<'_>,
+		mut line_nb: usize,
+	) -> std::fmt::Result {
 		if line_nb == 8 {
 			f.write_char(' ')?;
 			f.write_char(' ')?;

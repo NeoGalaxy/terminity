@@ -10,4 +10,3 @@ crate-type = ["cdylib"]
 
 [dependencies]
 terminity = {path = "../.."}
-terminity_widgets = {path = "../../../terminity_widgets"}

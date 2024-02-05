@@ -36,42 +36,33 @@
 
 // #![warn(missing_docs)]
 
-use std::{fmt::Display, io};
-
-pub use bincode as _bincode;
-use events::EventPoller;
-use serde::{Deserialize, Serialize};
-
-pub use terminity_widgets::Widget;
-
 pub mod events;
-pub mod games;
+pub mod game;
+pub mod widgets;
+
+extern crate self as terminity;
+
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
+pub use terminity_proc::frame;
+pub use terminity_proc::StructFrame;
+pub use terminity_proc::WidgetDisplay;
+use widgets::Widget;
+
+/// Re-export for use through build_game macro
+#[doc(hidden)]
+pub use bincode as _bincode;
+/// Re-export for use in proc macros
+#[doc(hidden)]
+pub mod _reexport {
+	pub use crossterm::terminal::Clear;
+	pub use crossterm::terminal::ClearType::UntilNewLine;
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Size {
 	width: u16,
 	height: u16,
-}
-
-pub trait Game {
-	type DataInput: for<'a> Deserialize<'a>;
-	type DataOutput: Serialize;
-	type WidgetKind: Widget;
-
-	fn start<R: io::Read>(data: Option<Self::DataInput>) -> Self;
-
-	fn disp<F: FnOnce(&Self::WidgetKind)>(&mut self, displayer: F);
-
-	fn update<E: EventPoller>(&mut self, events: E);
-
-	fn finish(self) -> Option<Self::DataOutput>;
-}
-
-#[repr(C)]
-pub struct GameData {
-	pub content: *mut u8,
-	pub size: u32,
-	pub capacity: u32,
 }
 
 #[derive(Debug)]
@@ -92,7 +83,7 @@ impl<W: Widget + ?Sized> Display for LineDisp<'_, W> {
 #[macro_export]
 macro_rules! build_game {
 	($GAME: ident) => {
-		mod _game_definition {
+		mod __build_game {
 			use super::$GAME;
 			use std::fmt::Write as _;
 
@@ -101,7 +92,7 @@ macro_rules! build_game {
 			static mut CMD_BUFFER: Option<Vec<u8>> = None;
 
 			#[no_mangle]
-			pub unsafe extern "C" fn start_game(data: $crate::GameData) {
+			pub unsafe extern "C" fn start_game(data: $crate::game::GameData) {
 				let data = if data.content.is_null() {
 					None
 				} else {
@@ -110,13 +101,13 @@ macro_rules! build_game {
 						data.size as usize,
 						data.capacity as usize,
 					);
-					Some($crate::_bincode::deserialize::<<$GAME as $crate::Game>::DataInput>(
+					Some($crate::_bincode::deserialize::<<$GAME as $crate::game::Game>::DataInput>(
 						&data_vec,
 					))
 				};
 				unsafe { DISP_BUFFER = Some(String::with_capacity(32)) }
 				unsafe { CMD_BUFFER = Some(Vec::new()) }
-				unsafe { GAME = Some(<$GAME as $crate::Game>::start::<std::fs::File>(None)) }
+				unsafe { GAME = Some($crate::game::Game::start::<std::fs::File>(None)) }
 			}
 
 			#[no_mangle]
@@ -125,8 +116,8 @@ macro_rules! build_game {
 				let game = unsafe { GAME.as_mut() }.unwrap();
 				let mut res =
 					$crate::WidgetBuffer { width: 0, height: 0, content: std::ptr::null() };
-				$crate::Game::disp(game, |w| {
-					let (width, height) = $crate::Widget::size(w);
+				$crate::game::Game::disp(game, |w| {
+					let (width, height) = $crate::widgets::Widget::size(w);
 					buffer.clear();
 					buffer.reserve_exact((width + 1) * height);
 					for line in 0..height {
@@ -150,21 +141,21 @@ macro_rules! build_game {
 				let commands_buffer = unsafe { CMD_BUFFER.take().unwrap() };
 				let mut evt_reader = $crate::events::EventReader::new(events, commands_buffer);
 				let game = unsafe { GAME.as_mut() }.unwrap();
-				$crate::Game::update(game, &mut evt_reader);
+				$crate::game::Game::update(game, &mut evt_reader);
 				evt_reader.into_commands_data()
 			}
 
 			#[no_mangle]
-			pub extern "C" fn close_game() -> $crate::GameData {
+			pub extern "C" fn close_game() -> $crate::game::GameData {
 				let game = unsafe { GAME.take() }.unwrap();
-				if let Some(game_state) = $crate::Game::finish(game) {
+				if let Some(game_state) = $crate::game::Game::finish(game) {
 					let mut data = $crate::_bincode::serialize(&game_state).unwrap();
 					let capacity = data.capacity();
 					let size = data.len();
 					let content = data.as_mut_ptr();
-					$crate::GameData { content, size: size as u32, capacity: capacity as u32 }
+					$crate::game::GameData { content, size: size as u32, capacity: capacity as u32 }
 				} else {
-					$crate::GameData { content: std::ptr::null_mut(), size: 0, capacity: 0 }
+					$crate::game::GameData { content: std::ptr::null_mut(), size: 0, capacity: 0 }
 				}
 			}
 
@@ -182,7 +173,7 @@ macro_rules! build_game {
 			}
 
 			#[no_mangle]
-			pub unsafe extern "C" fn free_game_data(data: $crate::GameData) {
+			pub unsafe extern "C" fn free_game_data(data: $crate::game::GameData) {
 				if !data.content.is_null() {
 					// convert to deallocate
 					Vec::from_raw_parts(data.content, data.size as usize, data.capacity as usize);

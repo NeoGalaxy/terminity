@@ -27,8 +27,8 @@ don't hesitate contacting me ^^
 Documentations:
 
  * [terminity](https://docs.rs/terminity)
- * [terminity_widgets](https://docs.rs/terminity_widgets)
- * [terminity_widgets_proc](https://docs.rs/terminity_widgets_proc)
+ * [terminity_runtime](https://docs.rs/terminity_runtime)
+ * [terminity_proc](https://docs.rs/terminity_proc)
 
 # Licencing
 

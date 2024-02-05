@@ -1,10 +1,9 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Write as _};
 use std::io;
-use terminity::build_game;
 use terminity::events::Event;
-use terminity::{events::EventPoller, Game};
-use terminity_widgets::widgets;
+use terminity::{build_game, widgets};
+use terminity::{events::EventPoller, game::Game};
 
 struct DebugAsDisplay<T: Debug>(T);
 

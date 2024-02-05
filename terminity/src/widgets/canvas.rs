@@ -1,6 +1,9 @@
 use crossterm::event::MouseEvent;
 
-use crate::{EventHandleingWidget, ResizableWisget, Widget};
+use crate::{
+	widgets::{EventHandleingWidget, ResizableWisget},
+	Widget,
+};
 
 #[derive(Debug)]
 pub struct Canvas<E, BG> {

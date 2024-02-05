@@ -208,7 +208,7 @@ impl Parse for FrameMacro {
 	}
 }
 
-pub fn parse_frame_lines<'a>(
+pub fn parse_frame_lines(
 	frame_width: &mut Option<usize>,
 	errors: &mut Vec<Diagnostic>,
 	content: &[LitStr],
@@ -553,8 +553,7 @@ mod tests {
 			r"| * HHHHHH WWWWWW * |"
 			r"| * HHHHHH WWWWWW * |"
 			r"\===================/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
@@ -599,8 +598,7 @@ mod tests {
 			r"| ccccc ddddd |"
 			r"| ccccc ddddd |"
 			r"\=============/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
@@ -674,8 +672,7 @@ mod tests {
 			r"| aaaaa aaaaa |"
 			r"| aaaaa aaaaa |"
 			r"\=============/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
@@ -749,8 +746,7 @@ mod tests {
 			r"| aaaaa aaaaa |"
 			r"| aaaaa aaaaa |"
 			r"\=============/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
@@ -824,8 +820,7 @@ mod tests {
 			r"| aaaaa aaaaa |"
 			r"| aaaaa aaaaa |"
 			r"\=============/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		println!("{:?}", res.1);
 		assert_eq!(res.1.len(), 1);
@@ -844,8 +839,7 @@ mod tests {
 			r"| aaaaa aaaaa |"
 			r"| aaaaa aaaaa |"
 			r"\=============/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		println!("{:?}", res.1);
 		assert_eq!(res.1.len(), 1);
@@ -859,8 +853,7 @@ mod tests {
 			r"| aaaa |"
 			r"| aaaa |"
 			r"\======/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		println!("{:?}", res.1);
 		assert_ne!(res.1.len(), 0);
@@ -873,8 +866,7 @@ mod tests {
 			r"/====\"
 			r"| aa |"
 			r"| aa |"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		println!("{:?}", res.1);
 		assert_eq!(res.1.len(), 1);
@@ -888,8 +880,7 @@ mod tests {
 			r"| aa |"
 			r"| aa |"
 			r"\====/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		println!("{:?}", res.1);
 		assert_eq!(res.1.len(), 1);
@@ -903,8 +894,7 @@ mod tests {
 			r"| aa  aaa |"
 			r"| aa  aaa |"
 			r"\=========/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		println!("{:?}", res.1);
 		assert_eq!(res.1.len(), 1);
@@ -919,8 +909,7 @@ mod tests {
 			r"| xxxx |"
 			r"| xxxx |"
 			r"\======/"
-		)
-		.into();
+		);
 		let res = run(syn::parse2(frame_def).unwrap());
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({

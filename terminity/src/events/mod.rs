@@ -3,8 +3,6 @@ use std::mem::{forget, size_of};
 pub use bincode as _bincode;
 use serde::{Deserialize, Serialize};
 
-pub use terminity_widgets::Widget;
-
 use crate::Size;
 /// Represents a key.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,5 +1,3 @@
-#![allow(clippy::tabs_in_doc_comments)]
-// #![warn(missing_docs)]
 //! Widgets for easier terminal UI building.
 //!
 //! This crate revolves around the trait [`Widget`], and defines various [widgets] to help building
@@ -13,19 +11,12 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::ops::Range;
 
-pub use terminity_widgets_proc::frame;
-pub use terminity_widgets_proc::StructFrame;
-pub use terminity_widgets_proc::WidgetDisplay;
 use unicode_segmentation::UnicodeSegmentation;
 
-pub mod widgets;
-
-// Re-export for internal use
-#[doc(hidden)]
-pub mod _reexport {
-	pub use crossterm::terminal::Clear;
-	pub use crossterm::terminal::ClearType::UntilNewLine;
-}
+pub mod auto_padder;
+pub mod canvas;
+pub mod frame;
+pub mod text;
 
 pub struct WidgetLineDisplay<'a, W: Widget + ?Sized> {
 	pub widget: &'a W,

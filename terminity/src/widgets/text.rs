@@ -1,5 +1,5 @@
 //! Defines the [Text] widget.
-use crate as terminity_widgets;
+
 use crate::Widget;
 use crate::WidgetDisplay;
 use std::fmt;

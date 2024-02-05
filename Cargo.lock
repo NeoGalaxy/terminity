@@ -328,7 +328,6 @@ name = "hello_world"
 version = "0.1.0"
 dependencies = [
  "terminity",
- "terminity_widgets",
 ]
 
 [[package]]
@@ -674,11 +673,31 @@ dependencies = [
  "bincode",
  "byteorder",
  "crossterm",
+ "format",
  "lazy_static",
  "rand",
  "serde",
+ "strip-ansi-escapes",
  "structopt",
- "terminity_widgets",
+ "terminity_proc",
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "terminity_proc"
+version = "0.1.0"
+dependencies = [
+ "convert_case",
+ "crossterm",
+ "darling",
+ "proc-macro-crate",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "strip-ansi-escapes",
+ "syn 1.0.109",
+ "terminity",
+ "unicode-segmentation",
 ]
 
 [[package]]
@@ -692,35 +711,6 @@ dependencies = [
  "libloading",
  "rand",
  "terminity",
- "terminity_widgets",
-]
-
-[[package]]
-name = "terminity_widgets"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "format",
- "strip-ansi-escapes",
- "terminity_widgets_proc",
- "unicode-segmentation",
-]
-
-[[package]]
-name = "terminity_widgets_proc"
-version = "0.1.0"
-dependencies = [
- "convert_case",
- "crossterm",
- "darling",
- "proc-macro-crate",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "strip-ansi-escapes",
- "syn 1.0.109",
- "terminity_widgets",
- "unicode-segmentation",
 ]
 
 [[package]]

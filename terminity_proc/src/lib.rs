@@ -2,7 +2,7 @@
 #![warn(missing_docs)]
 
 /*! Crate defining the procedural macros for
-	[terminity_widgets](https://docs.rs/terminity_widgets/latest/terminity_widgets/index.html).
+	[terminity](https://docs.rs/terminity/latest/terminity/index.html).
 
 	This crate defines two macros, [`frame!`] and [`derive(WidgetDisplay)`](widget_display),
 	to help you write your apps with terminity's widgets. This is at a very early development stage,
@@ -49,13 +49,13 @@ use syn::{parse_macro_input, DeriveInput};
 /// index corresponding to the associated expression. For instance, in the following example, the
 /// box described with `H`s will be replaced by the lines of `texts[0]`, and the one with `W`s by
 /// the lines of `texts[1]`. See the doc of
-/// [`Frame`](https://docs.rs/terminity_widgets/latest/terminity_widgets/widgets/frame/struct.Frame.html)
+/// [`Frame`](https://docs.rs/terminity/latest/terminity/widgets/frame/struct.Frame.html)
 /// for more details on how to use a frame.
 ///
 /// Example:
 /// ```
-/// use terminity_widgets_proc::frame;
-/// use terminity_widgets::widgets::text::Text;
+/// use terminity_proc::frame;
+/// use terminity::widgets::text::Text;
 /// let texts = vec![
 /// 	Text::new(["Hello".into(), "-----".into()], 5),
 /// 	Text::new(["World".into(), "".into()], 5),
@@ -94,8 +94,8 @@ use syn::{parse_macro_input, DeriveInput};
 ///
 /// Here is an example equivalent to the previous one, using the array syntax:
 /// ```
-/// use terminity_widgets_proc::frame;
-/// use terminity_widgets::widgets::text::Text;
+/// use terminity_proc::frame;
+/// use terminity::widgets::text::Text;
 /// let mut framed_texts = frame!(
 /// 	[
 /// 		'H': Text::new(["Hello".into(), "-----".into()], 5),
@@ -146,8 +146,8 @@ pub fn struct_frame(tokens: TokenStream) -> TokenStream {
 ///
 /// Example:
 /// ```
-/// use terminity_widgets::Widget;
-/// use terminity_widgets_proc::WidgetDisplay;
+/// use terminity::Widget;
+/// use terminity_proc::WidgetDisplay;
 /// #[derive(WidgetDisplay)]
 /// struct MyWidget();
 ///
@@ -185,7 +185,7 @@ pub fn widget_display(tokens: TokenStream) -> TokenStream {
 					self.display_line(f, i)?;
 					if i != self.size().1 - 1 {
 						f.write_str(&format!("{}\n\r",
-							terminity_widgets::_reexport::Clear(terminity_widgets::_reexport::UntilNewLine)))?;
+							terminity::_reexport::Clear(terminity::_reexport::UntilNewLine)))?;
 					}
 				}
 				Ok(())

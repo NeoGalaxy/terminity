@@ -1,9 +1,9 @@
 [package]
-name = "terminity_widgets_proc"
+name = "terminity_proc"
 version = "0.1.0"
 authors = ["Naeio <naeiogalaxy@gmail.com>"]
 edition = "2021"
-description = "Proc macros for terminity_widgets"
+description = "Proc macros for terminity"
 readme = "README.md"
 #homepage = 
 repository = "https://github.com/NeoGalaxy/terminity"
@@ -27,4 +27,4 @@ convert_case = "0.6.0"
 
 [dev-dependencies]
 crossterm = "0.26"
-terminity_widgets = { version = "0.1", path = "../terminity_widgets" }
+terminity = { version = "0.1", path = "../terminity" }

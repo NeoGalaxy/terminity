@@ -1,6 +1,6 @@
 //! Defines the [Frame] widget.
 use crate as terminity_widgets;
-use crate::EventHandleingWidget;
+use crate::widgets::EventHandleingWidget;
 // For the macros
 use crate::Widget;
 use crossterm::event::MouseEvent;
@@ -131,16 +131,16 @@ where
 	Coll::Output: Widget,
 {
 	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
-		let (begin, widgets_line) = &self.content[line as usize];
-		f.write_str(&begin)?;
+		let (begin, widgets_line) = &self.content[line];
+		f.write_str(begin)?;
 		for ((widget_i, w_line), postfix) in widgets_line {
 			self.widgets[widget_i.clone()].display_line(f, *w_line)?;
-			f.write_str(&postfix)?;
+			f.write_str(postfix)?;
 		}
 		Ok(())
 	}
 	fn size(&self) -> (usize, usize) {
-		self.size.clone()
+		self.size
 	}
 }
 
@@ -176,7 +176,7 @@ where
 		// TODO: optimize
 		let (prefix, row) = &self.content[row_index as usize];
 		// TODO: find better way to get length without ansi
-		let mut curr_col = String::from_utf8(strip_ansi_escapes::strip(&prefix).unwrap())
+		let mut curr_col = String::from_utf8(strip_ansi_escapes::strip(prefix).unwrap())
 			.unwrap()
 			.graphemes(true)
 			.count();
@@ -197,7 +197,7 @@ where
 				));
 			}
 			curr_col += widget.size().0
-				+ String::from_utf8(strip_ansi_escapes::strip(&suffix).unwrap())
+				+ String::from_utf8(strip_ansi_escapes::strip(suffix).unwrap())
 					.unwrap()
 					.graphemes(true)
 					.count();
@@ -222,7 +222,7 @@ impl<Key, Coll> DerefMut for Frame<Key, Coll> {
 #[cfg(test)]
 mod tests {
 	use crossterm::event::KeyModifiers;
-	use terminity_widgets_proc::{frame, StructFrame};
+	use terminity_proc::{frame, StructFrame};
 
 	use super::*;
 	struct Img {
@@ -233,10 +233,10 @@ mod tests {
 
 	impl Widget for Img {
 		fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
-			f.write_str(&self.content[line as usize])
+			f.write_str(&self.content[line])
 		}
 		fn size(&self) -> (usize, usize) {
-			self.size.clone()
+			self.size
 		}
 	}
 
