@@ -6,7 +6,7 @@ edition = "2021"
 description = "Runtime to run terminity projects"
 readme = "../README.md"
 repository = "https://github.com/NeoGalaxy/terminity"
-license = "UNLICENSED"
+license = "GPL3"
 keywords = ["TUI", "UI", "terminal", "game-development"]
 categories = ["game-development", "games"]
 

@@ -15,7 +15,7 @@ use std::{
 	mem::size_of,
 	panic::{self, catch_unwind, resume_unwind},
 	path::PathBuf,
-	ptr::{null, null_mut},
+	ptr::null_mut,
 	slice,
 	sync::{Arc, Mutex},
 	thread::sleep,
