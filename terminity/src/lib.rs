@@ -44,6 +44,11 @@ extern crate self as terminity;
 
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use std::io::Write as _;
+use std::iter::repeat;
+use std::mem::size_of;
+use std::ptr::null;
+
 pub use terminity_proc::frame;
 pub use terminity_proc::StructFrame;
 pub use terminity_proc::WidgetDisplay;
@@ -71,6 +76,43 @@ pub struct WidgetBuffer {
 	pub width: u32,
 	pub height: u32,
 	pub content: *const u8,
+}
+
+impl WidgetBuffer {
+	pub fn new_empty() -> Self {
+		Self { width: 0, height: 0, content: null() }
+	}
+	pub unsafe fn new<W: Widget>(widget: &W, buffer: &mut Vec<u8>) -> Self {
+		let (width, height) = widgets::Widget::size(widget);
+		buffer.clear();
+
+		// Reserve for the indexes of the lines
+		buffer.extend(repeat(0).take(1 + height * size_of::<u16>()));
+
+		// TODO: better size heuristic + way to parameter
+		buffer.reserve(width * height);
+
+		for line in 0..height {
+			let line_start = buffer.len();
+			let bytes = line_start.to_le_bytes();
+
+			buffer[line * size_of::<u16>()] = bytes[0];
+			buffer[line * size_of::<u16>() + 1] = bytes[1];
+
+			write!(buffer, "{}", LineDisp(line, widget)).unwrap();
+		}
+
+		let line_end = buffer.len();
+		let bytes = line_end.to_le_bytes();
+
+		buffer[height * size_of::<u16>()] = bytes[0];
+		buffer[height * size_of::<u16>() + 1] = bytes[1];
+
+		Self { width: width as u32, height: height as u32, content: buffer.as_ptr() }
+	}
+	pub fn is_empty(&self) -> bool {
+		self.content.is_null()
+	}
 }
 
 pub struct LineDisp<'a, W: Widget + ?Sized>(pub usize, pub &'a W);
@@ -114,20 +156,9 @@ macro_rules! build_game {
 			pub extern "C" fn disp_game() -> $crate::WidgetBuffer {
 				let buffer = unsafe { DISP_BUFFER.as_mut() }.unwrap();
 				let game = unsafe { GAME.as_mut() }.unwrap();
-				let mut res =
-					$crate::WidgetBuffer { width: 0, height: 0, content: std::ptr::null() };
+				let mut res = $crate::WidgetBuffer::new_empty();
 				$crate::game::Game::disp(game, |w| {
-					let (width, height) = $crate::widgets::Widget::size(w);
-					buffer.clear();
-					buffer.reserve_exact((width + 1) * height);
-					for line in 0..height {
-						write!(buffer, "{}", $crate::LineDisp(line, w)).unwrap()
-					}
-					res = $crate::WidgetBuffer {
-						width: width as u32,
-						height: height as u32,
-						content: buffer.as_ptr(),
-					};
+					res = unsafe { $crate::WidgetBuffer::new(w, buffer.as_mut_vec()) };
 				});
 				res
 			}

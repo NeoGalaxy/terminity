@@ -38,10 +38,23 @@ struct GameDisplay(WidgetBuffer);
 
 impl Widget for GameDisplay {
 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
+		let bounds_index = line * size_of::<u16>();
+		let bounds = unsafe {
+			(
+				u16::from_le_bytes([
+					*self.0.content.add(bounds_index),
+					*self.0.content.add(bounds_index + 1),
+				]),
+				u16::from_le_bytes([
+					*self.0.content.add(bounds_index + 2),
+					*self.0.content.add(bounds_index + 3),
+				]),
+			)
+		};
 		let content = unsafe {
 			slice::from_raw_parts(
-				self.0.content.offset(line as isize * self.0.width as isize),
-				self.0.width as usize,
+				self.0.content.add(bounds.0 as usize),
+				(bounds.1 - bounds.0) as usize,
 			)
 		};
 		let s = unsafe { std::str::from_utf8_unchecked(content) };
