@@ -25,11 +25,11 @@ impl Game for HelloWorld {
 	fn disp<F: FnOnce(&Self::WidgetKind)>(&mut self, displayer: F) {
 		self.frame += 1;
 		let mut array: [String; 30] = Default::default();
-		array[0] = "                             ------------------------".into();
+		array[0] = "#*#*------------------------".into();
 		array[1] = "".into();
-		array[2] = "                                    Hello world!".into();
+		array[2] = "         Hello world!".into();
 		array[3] = "".into();
-		array[4] = "                             ------------------------".into();
+		array[4] = "#*#*------------------------".into();
 		array[5] = format!("                                 frame: {:?}", self.frame);
 		let mut n = 0;
 		while self.events.front().map_or(false, |v| v.1 > 50) {

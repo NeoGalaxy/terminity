@@ -2,7 +2,7 @@ use crossterm::event::KeyEvent;
 use terminity::events::{Event, KeyPress, KeyRelease, Mouse, MouseButton, MouseKind, Position};
 use terminity::events::{KeyCode, KeyModifiers};
 
-pub(crate) fn from_crossterm(ct_evt: crossterm::event::Event) -> Option<Event> {
+pub fn from_crossterm(ct_evt: crossterm::event::Event) -> Option<Event> {
 	match ct_evt {
 		crossterm::event::Event::FocusGained => Some(Event::FocusChange { has_focus: true }),
 

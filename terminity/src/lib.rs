@@ -87,7 +87,7 @@ impl WidgetBuffer {
 		buffer.clear();
 
 		// Reserve for the indexes of the lines
-		buffer.extend(repeat(0).take(1 + height * size_of::<u16>()));
+		buffer.extend(repeat(0).take((1 + height) * size_of::<u16>()));
 
 		// TODO: better size heuristic + way to parameter
 		buffer.reserve(width * height);
