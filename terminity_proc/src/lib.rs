@@ -164,10 +164,10 @@ pub fn struct_frame(tokens: TokenStream) -> TokenStream {
 /// 	}
 /// }
 ///
-/// fn main() {
-/// 	let foo = MyWidget();
-/// 	println!("{}", foo); //"Hello\nWorld"
-/// }
+/// # fn main() {
+/// let foo = MyWidget();
+/// println!("{}", foo); //"Hello\nWorld"
+/// # }
 /// ```
 ///
 #[proc_macro_derive(WidgetDisplay)]
@@ -189,6 +189,30 @@ pub fn widget_display(tokens: TokenStream) -> TokenStream {
 					}
 				}
 				Ok(())
+			}
+		}
+	};
+	proc_macro::TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(EventBubblingWidget)]
+pub fn event_bubbling_widget(tokens: TokenStream) -> TokenStream {
+	let input = parse_macro_input!(tokens as DeriveInput);
+
+	let name = input.ident;
+
+	let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+	let expanded = quote! {
+		impl #impl_generics terminity::widgets::EventBubblingWidget for #name #ty_generics #where_clause {
+
+			type FinalWidgetData<'a> = &'a mut Self;
+			fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>, BubblingEvent) -> R>(
+				&'a mut self,
+				event: BubblingEvent,
+				callback: F,
+			) -> R {
+				callback(self, event)
 			}
 		}
 	};

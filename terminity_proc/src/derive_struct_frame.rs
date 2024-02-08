@@ -50,8 +50,8 @@ impl Parse for SFImplArgs {
 
 #[derive(FromMeta)]
 struct SFImplArgs {
-	#[darling(rename = "EventHandleingWidget")]
-	handle_event: Option<()>,
+	#[darling(rename = "EventBubblingWidget")]
+	bubble_event: Option<()>,
 }
 
 #[derive(FromMeta)]
@@ -117,7 +117,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				}
 			}
 		}
-		.unwrap_or(SFImplArgs { handle_event: None });
+		.unwrap_or(SFImplArgs { bubble_event: None });
 		(all_impls, layout_content)
 	};
 
@@ -258,13 +258,13 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 		}
 	};
 
-	if all_impls.handle_event == Some(()) {
+	if all_impls.bubble_event == Some(()) {
 		let enum_name = Ident::new(&(ident.to_string() + "MouseEvents"), ident.span());
 
 		let enum_variants =
 			widget_indexes.values().map(|(_, variant, field_type, _)| match variant {
 				Some(v) => quote! {
-					#v(<#field_type as terminity::widgets::EventHandleingWidget>::HandledEvent),
+					#v(<#field_type as terminity::widgets::EventBubblingWidget>::HandledEvent),
 				},
 				None => quote!(),
 			});
@@ -293,7 +293,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 							}
 							if curr_col + self.#field.size().0 > column as usize {
 								return Some(#enum_name::#variant(
-										terminity::widgets::EventHandleingWidget::handle_event(
+										terminity::widgets::EventBubblingWidget::bubble_event(
 											&mut self.#field,
 											crossterm::event::MouseEvent {
 												column: column - curr_col as u16,
@@ -322,14 +322,21 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				#(#enum_variants)*
 			}
 
-			impl #impl_generics terminity::widgets::EventHandleingWidget for #ident #ty_generics #where_clause {
-				type HandledEvent = Option<#enum_name>;
-				fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent {
-					let crossterm::event::MouseEvent { column, row, kind, modifiers } = event;
-					match row as usize {
-						#(#mouse_event_content)*
-						_ => None,
-					}
+			impl #impl_generics terminity::widgets::EventBubblingWidget for #ident #ty_generics #where_clause {
+				type FinalWidgetData<'a> = ();
+				/// Handles a mouse event. see the [trait](Self)'s doc for more details.
+				fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>) -> R>(
+					&'a mut self,
+					event: crossterm::event::MouseEvent,
+					widget_pos: Position,
+					callback: F,
+				) -> R {
+					todo!()
+					// let crossterm::event::MouseEvent { column, row, kind, modifiers } = event;
+					// match row as usize {
+					// 	#(#mouse_event_content)*
+					// 	_ => None,
+					// }
 				}
 			}
 		});
@@ -345,7 +352,7 @@ mod tests {
 	#[test]
 	fn a() {
 		let input = quote! {
-			#[sf_impl(EventHandleingWidget)]
+			#[sf_impl(EventBubblingWidget)]
 			#[sf_layout {
 				"*-------------*",
 				"| HHHHHHHHHHH |",

@@ -533,7 +533,7 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 	(
 		quote!({
 			let widgets = #widgets;
-			terminity_widgets::widgets::frame::Frame::new(
+			terminity::widgets::frame::Frame::new(
 				  vec![#frame_lines], widgets
 			)
 		}),
@@ -558,7 +558,7 @@ mod tests {
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
 			let widgets = [img1, img2];
-			terminity_widgets::widgets::frame::Frame::new(
+			terminity::widgets::frame::Frame::new(
 				vec![
 					("/===================\\".to_owned(), vec![]),
 					(
@@ -603,7 +603,7 @@ mod tests {
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
 			let widgets = values;
-			terminity_widgets::widgets::frame::Frame::new(
+			terminity::widgets::frame::Frame::new(
 				vec![
 					("/=============\\".to_owned(), vec![]),
 					(
@@ -677,7 +677,7 @@ mod tests {
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
 			let widgets = values;
-			terminity_widgets::widgets::frame::Frame::new(
+			terminity::widgets::frame::Frame::new(
 				vec![
 					("/=============\\".to_owned(), vec![]),
 					(
@@ -751,7 +751,7 @@ mod tests {
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
 			let widgets = values;
-			terminity_widgets::widgets::frame::Frame::new(
+			terminity::widgets::frame::Frame::new(
 				vec![
 					("/=============\\".to_owned(), vec![]),
 					(
@@ -914,7 +914,7 @@ mod tests {
 		#[rustfmt::skip]
 		let expected: proc_macro2::TokenStream = quote!({
 			let widgets = values;
-			terminity_widgets::widgets::frame::Frame::new(
+			terminity::widgets::frame::Frame::new(
 				vec![
 					("/======\\".to_owned(), vec![]),
 					(

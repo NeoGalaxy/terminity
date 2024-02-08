@@ -13,6 +13,9 @@ use std::ops::Range;
 
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::events;
+use crate::events::Position;
+
 pub mod auto_padder;
 pub mod canvas;
 pub mod frame;
@@ -104,8 +107,8 @@ pub trait Widget {
 /// it may manage it itself or pass it on to a child widget by adapting the coordinates of the mouse
 /// event.
 ///
-/// Be careful: when a parent widget implements Deref, it might still implement EventHandleingWidget,
-/// meaning that calling `.handle_event` will call the parent's implementation and not the child's
+/// Be careful: when a parent widget implements Deref, it might still implement EventBubblingWidget,
+/// meaning that calling `.bubble_event` will call the parent's implementation and not the child's
 /// one. This is intended behaviour and designed to make code easier to write and read, assuming
 /// both knows this behaviour.
 ///
@@ -115,7 +118,7 @@ pub trait Widget {
 /// use std::fmt::Formatter;
 /// use terminity_widgets::widgets::auto_padder::AutoPadder;
 /// use crossterm::event::{MouseEvent, MouseEventKind, KeyModifiers};
-/// use terminity_widgets::{Widget, EventHandleingWidget};
+/// use terminity_widgets::{Widget, EventBubblingWidget};
 ///
 /// // Defining a custom widget of size `(3, 3)`
 /// // that returns the obtained coordinates on a mouse event
@@ -127,10 +130,10 @@ pub trait Widget {
 /// 		# unimplemented!()
 /// 	# }
 /// }
-/// impl EventHandleingWidget for MyWidget {
+/// impl EventBubblingWidget for MyWidget {
 /// 	type HandledEvent = (usize, usize);
 /// 	// Returns the obtained coordinates
-/// 	fn handle_event(&mut self, event: MouseEvent) -> Self::HandledEvent {
+/// 	fn bubble_event(&mut self, event: MouseEvent) -> Self::HandledEvent {
 /// 		(event.row as usize, event.column as usize)
 /// 	}
 /// }
@@ -155,16 +158,46 @@ pub trait Widget {
 /// };
 ///
 /// // (0, 0) is outside of the child, so AutoPadder returns None.
-/// assert_eq!(my_widget.handle_event(event0), None);
+/// assert_eq!(my_widget.bubble_event(event0), None);
 ///
 /// // (2, 2) is inside of the child, AutoPadder bubbles the event by adapting the coordinates.
-/// assert_eq!(my_widget.handle_event(event1), Some((1, 1)));
+/// assert_eq!(my_widget.bubble_event(event1), Some((1, 1)));
 /// ```
-pub trait EventHandleingWidget: Widget {
-	/// The type of the return value of the `handle_event` call.
-	type HandledEvent;
+pub trait EventBubblingWidget: Widget {
+	type FinalWidgetData<'a>
+	where
+		Self: 'a;
 	/// Handles a mouse event. see the [trait](Self)'s doc for more details.
-	fn handle_event(&mut self, event: crossterm::event::MouseEvent) -> Self::HandledEvent;
+	fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>, BubblingEvent) -> R>(
+		&'a mut self,
+		event: BubblingEvent,
+		callback: F,
+	) -> R;
+}
+pub use terminity_proc::EventBubblingWidget;
+
+pub struct BubblingEvent {
+	pub event: events::Mouse,
+	pub current_widget_pos: Position,
+}
+
+impl From<events::Mouse> for BubblingEvent {
+	fn from(value: events::Mouse) -> Self {
+		Self { event: value, current_widget_pos: Position { line: 0, column: 0 } }
+	}
+}
+
+impl BubblingEvent {
+	pub fn pos(&self) -> Position {
+		self.event.position - self.current_widget_pos
+	}
+	pub fn absolute_pos(&self) -> Position {
+		self.event.position
+	}
+	pub fn bubble_at(mut self, relative_pos: Position) -> Self {
+		self.current_widget_pos += relative_pos;
+		self
+	}
 }
 
 /// A widget that supports resizing.

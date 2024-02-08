@@ -206,7 +206,7 @@ macro_rules! build_game {
 			#[no_mangle]
 			pub unsafe extern "C" fn free_game_data(data: $crate::game::GameData) {
 				if !data.content.is_null() {
-					// convert to deallocate
+					// convert to de-allocate
 					Vec::from_raw_parts(data.content, data.size as usize, data.capacity as usize);
 				}
 			}

@@ -3,7 +3,10 @@ use std::{
 	fmt::Write as _,
 	ops::{Index, IndexMut},
 };
-use terminity::widgets::Widget;
+use terminity::{
+	events::Position,
+	widgets::{EventBubblingWidget, Widget},
+};
 
 pub type Pos = (usize, usize);
 
@@ -402,5 +405,35 @@ impl Widget for Board {
 			};
 		}
 		Ok(())
+	}
+}
+
+impl EventBubblingWidget for Board {
+	type FinalWidgetData<'a> = Option<(Pos, Option<Tile>)>;
+
+	fn bubble_event<
+		'a,
+		R,
+		F: FnOnce(Self::FinalWidgetData<'a>, terminity::widgets::BubblingEvent) -> R,
+	>(
+		&'a mut self,
+		event: terminity::widgets::BubblingEvent,
+		callback: F,
+	) -> R {
+		// NB: the event will be filtered and re-indexed by the wrapping Auto-Padder
+		let pos = event.pos();
+		let mut row = pos.line;
+		let mut column = pos.column / 2;
+		if column < 1 || column > 8 || row >= 8 {
+			return callback(None, event.bubble_at(pos));
+		}
+		if self.rotated {
+			column = 8 - column;
+		} else {
+			column -= 1;
+			row = 7 - row;
+		}
+		let new_pos = (column as usize, row as usize);
+		callback(Some((new_pos, self[new_pos])), event.bubble_at(Position { line: row, column }))
 	}
 }

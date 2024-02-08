@@ -1,9 +1,54 @@
-use std::mem::{forget, size_of};
+use std::{
+	mem::{forget, size_of},
+	ops::{Add, AddAssign, Sub, SubAssign},
+};
 
 pub use bincode as _bincode;
 use serde::{Deserialize, Serialize};
 
 use crate::Size;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct Position {
+	pub line: u16,
+	pub column: u16,
+}
+
+impl Add<Position> for Position {
+	type Output = Self;
+	fn add(self, rhs: Position) -> Self::Output {
+		Self { line: self.line + rhs.line, column: self.column + rhs.column }
+	}
+}
+
+impl AddAssign for Position {
+	fn add_assign(&mut self, rhs: Self) {
+		*self = *self + rhs
+	}
+}
+
+impl SubAssign for Position {
+	fn sub_assign(&mut self, rhs: Self) {
+		*self = *self - rhs
+	}
+}
+
+impl Sub<Position> for Position {
+	type Output = Self;
+	fn sub(self, rhs: Position) -> Self::Output {
+		Self {
+			line: self.line.saturating_sub(rhs.line),
+			column: self.column.saturating_sub(rhs.column),
+		}
+	}
+}
+
+pub trait PositionnalEvent {
+	fn get_pos(&self) -> Position;
+	fn set_pos(&mut self, pos: Position);
+	fn with_pos(&self, pos: Position) -> Self;
+}
+
 /// Represents a key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum KeyCode {
@@ -86,8 +131,7 @@ pub enum MouseKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mouse {
 	pub kind: MouseKind,
-	pub line: u16,
-	pub column: u16,
+	pub position: Position,
 	pub modifiers: KeyModifiers,
 }
 

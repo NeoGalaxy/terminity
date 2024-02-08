@@ -3,11 +3,16 @@ mod board;
 use std::io;
 use std::time::{Duration, Instant};
 
+use crossterm::event::MouseEvent;
 use terminity::build_game;
-use terminity::events::{Event, KeyCode, KeyPress};
+use terminity::events::{Event, KeyCode, KeyPress, Mouse, MouseButton, MouseKind};
+use terminity::widgets::frame::Frame;
+use terminity::widgets::EventBubblingWidget;
 use terminity::{events::EventPoller, game::Game};
 
-use board::Board;
+use board::{Board, Pos};
+
+use crate::board::Tile;
 
 impl Game for Chess {
 	type DataInput = ();
@@ -25,12 +30,19 @@ impl Game for Chess {
 	fn update<E: EventPoller>(&mut self, events: E) {
 		for event in events {
 			match event {
-				Event::Mouse(_e) => {
-					// Using the terminity_widget mouse api.
-					// The wrapping auto-padder filters out the events out of the board
-					// and changes the column and line values to correspond to the position
-					// on the board.
-					todo!()
+				Event::Mouse(e) => {
+					let tile = self.board.bubble_event(e.clone().into(), |t, _| Some(t?.0));
+					let Some(tile) = tile else { continue };
+
+					if tile != self.board.cursor_pos {
+						self.board.cursor_pos = tile
+					}
+
+					match &e.kind {
+						MouseKind::Up(MouseButton::Left) => self.board.select(),
+						MouseKind::Down(MouseButton::Left) => self.board.play(),
+						_ => (),
+					}
 				}
 				Event::KeyPress(KeyPress { code: KeyCode::Enter, .. }) => {
 					if self.board.selected.is_none() {

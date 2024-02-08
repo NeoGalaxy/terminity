@@ -1,5 +1,5 @@
 use crossterm::event::KeyEvent;
-use terminity::events::{Event, KeyPress, KeyRelease, Mouse, MouseButton, MouseKind};
+use terminity::events::{Event, KeyPress, KeyRelease, Mouse, MouseButton, MouseKind, Position};
 use terminity::events::{KeyCode, KeyModifiers};
 
 pub(crate) fn from_crossterm(ct_evt: crossterm::event::Event) -> Option<Event> {
@@ -92,14 +92,13 @@ pub(crate) fn from_crossterm(ct_evt: crossterm::event::Event) -> Option<Event> {
 				crossterm::event::MouseEventKind::ScrollDown => MouseKind::ScrollDown,
 				crossterm::event::MouseEventKind::ScrollUp => MouseKind::ScrollUp,
 			},
-			line: m.row,
-			column: m.column,
+			position: Position { line: m.row, column: m.column },
 			modifiers: modifiers_from_crossterm(&m.modifiers, None),
 		})),
 
-		crossterm::event::Event::Paste(_) => todo!(),
+		crossterm::event::Event::Paste(_) => None,
 
-		crossterm::event::Event::Resize(_, _) => todo!(),
+		crossterm::event::Event::Resize(_, _) => None,
 	}
 }
 

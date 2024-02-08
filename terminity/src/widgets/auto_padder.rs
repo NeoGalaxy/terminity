@@ -1,7 +1,8 @@
 //! Defines the [AutoPadder] widget.
 use crossterm::event::MouseEvent;
 
-use crate::widgets::EventHandleingWidget;
+use crate::events::Position;
+use crate::widgets::EventBubblingWidget;
 use crate::widgets::ResizableWisget;
 use crate::Widget;
 use crate::WidgetDisplay;
@@ -69,34 +70,41 @@ impl<W: Widget> Widget for AutoPadder<W> {
 	}
 }
 
-impl<W: EventHandleingWidget> EventHandleingWidget for AutoPadder<W> {
-	type HandledEvent = Option<W::HandledEvent>;
-	fn handle_event(&mut self, event: MouseEvent) -> Self::HandledEvent {
-		let MouseEvent { column, row, kind, modifiers } = event;
-		let mut column = column as i32;
-		let mut row = row as i32;
-		let content_size = self.0.size();
-		let total_size = self.1;
-		let top_padding = (total_size.1.saturating_sub(content_size.1)) / 2;
-		let left_padding = (total_size.0.saturating_sub(content_size.0)) / 2;
-		column -= left_padding as i32;
-		row -= top_padding as i32;
+// impl<W: EventBubblingWidget> EventBubblingWidget for AutoPadder<W> {
+// 	type FinalWidgetData<'a> = ();
+// 	/// Handles a mouse event. see the [trait](Self)'s doc for more details.
+// 	fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>) -> R>(
+// 		&'a mut self,
+// 		event: crossterm::event::MouseEvent,
+// 		widget_pos: Position,
+// 		callback: F,
+// 	) -> R {
+// 		todo!()
+// 		// let MouseEvent { column, row, kind, modifiers } = event;
+// 		// let mut column = column as i32;
+// 		// let mut row = row as i32;
+// 		// let content_size = self.0.size();
+// 		// let total_size = self.1;
+// 		// let top_padding = (total_size.1.saturating_sub(content_size.1)) / 2;
+// 		// let left_padding = (total_size.0.saturating_sub(content_size.0)) / 2;
+// 		// column -= left_padding as i32;
+// 		// row -= top_padding as i32;
 
-		if column >= 0
-			&& (column as usize) < content_size.0
-			&& row >= 0 && (row as usize) < content_size.1
-		{
-			Some(self.0.handle_event(MouseEvent {
-				kind,
-				column: column as u16,
-				row: row as u16,
-				modifiers,
-			}))
-		} else {
-			None
-		}
-	}
-}
+// 		// if column >= 0
+// 		// 	&& (column as usize) < content_size.0
+// 		// 	&& row >= 0 && (row as usize) < content_size.1
+// 		// {
+// 		// 	Some(self.0.bubble_event(MouseEvent {
+// 		// 		kind,
+// 		// 		column: column as u16,
+// 		// 		row: row as u16,
+// 		// 		modifiers,
+// 		// 	}))
+// 		// } else {
+// 		// 	None
+// 		// }
+// 	}
+// }
 
 impl<W: Widget> ResizableWisget for AutoPadder<W> {
 	fn resize(&mut self, size: (usize, usize)) {

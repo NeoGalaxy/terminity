@@ -1,7 +1,8 @@
 use crossterm::event::MouseEvent;
 
 use crate::{
-	widgets::{EventHandleingWidget, ResizableWisget},
+	events::Position,
+	widgets::{EventBubblingWidget, ResizableWisget},
 	Widget,
 };
 
@@ -94,32 +95,39 @@ pub enum CanvasEvent<EEvt, BGEvt> {
 	Background(BGEvt),
 }
 
-impl<E: EventHandleingWidget, BG: EventHandleingWidget> EventHandleingWidget for Canvas<E, BG> {
-	type HandledEvent = CanvasEvent<E::HandledEvent, BG::HandledEvent>;
-	fn handle_event(&mut self, event: MouseEvent) -> Self::HandledEvent {
-		let MouseEvent { column, row, kind, modifiers } = event;
-		for elm in &mut self.elements {
-			let w_size = elm.widget.size();
-			let end = (elm.pos.x + w_size.0 as i32, elm.pos.y + w_size.1 as i32);
-			if (elm.pos.x..end.0).contains(&(row as i32))
-				&& (elm.pos.x..end.0).contains(&(column as i32))
-			{
-				return CanvasEvent::Entity(elm.widget.handle_event(MouseEvent {
-					row: row - elm.pos.x as u16,
-					column: column - elm.pos.y as u16,
-					kind,
-					modifiers,
-				}));
-			}
-		}
-		CanvasEvent::Background(self.background.handle_event(MouseEvent {
-			row,
-			column,
-			kind,
-			modifiers,
-		}))
-	}
-}
+// impl<E: EventBubblingWidget, BG: EventBubblingWidget> EventBubblingWidget for Canvas<E, BG> {
+// 	type FinalWidgetData<'a> = ();
+// 	/// Handles a mouse event. see the [trait](Self)'s doc for more details.
+// 	fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>) -> R>(
+// 		&'a mut self,
+// 		event: crossterm::event::MouseEvent,
+// 		widget_pos: Position,
+// 		callback: F,
+// 	) -> R {
+// 		todo!()
+// 		// let MouseEvent { column, row, kind, modifiers } = event;
+// 		// for elm in &mut self.elements {
+// 		// 	let w_size = elm.widget.size();
+// 		// 	let end = (elm.pos.x + w_size.0 as i32, elm.pos.y + w_size.1 as i32);
+// 		// 	if (elm.pos.x..end.0).contains(&(row as i32))
+// 		// 		&& (elm.pos.x..end.0).contains(&(column as i32))
+// 		// 	{
+// 		// 		return CanvasEvent::Entity(elm.widget.bubble_event(MouseEvent {
+// 		// 			row: row - elm.pos.x as u16,
+// 		// 			column: column - elm.pos.y as u16,
+// 		// 			kind,
+// 		// 			modifiers,
+// 		// 		}));
+// 		// 	}
+// 		// }
+// 		// CanvasEvent::Background(self.background.bubble_event(MouseEvent {
+// 		// 	row,
+// 		// 	column,
+// 		// 	kind,
+// 		// 	modifiers,
+// 		// }))
+// 	}
+// }
 
 impl<E, BG: ResizableWisget> ResizableWisget for Canvas<E, BG> {
 	fn resize(&mut self, size: (usize, usize)) {
