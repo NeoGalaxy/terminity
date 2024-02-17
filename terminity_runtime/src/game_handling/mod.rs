@@ -1,27 +1,35 @@
+use crate::events;
+use crossterm::QueueableCommand as _;
 use libloading::{Library, Symbol};
 use std::{
+	io::Write as _,
+	marker::PhantomData,
 	mem::{forget, size_of},
 	path::PathBuf,
 	ptr::null_mut,
 	slice,
-	sync::mpsc::Receiver,
 };
 use terminity::{
 	events::{CommandEvent, Event, KeyCode, KeyModifiers, KeyPress, TerminityCommandsData},
 	game::GameData,
 	widgets::Widget,
-	WidgetBuffer, WidgetDisplay,
+	Size, WidgetBuffer, WidgetDisplay,
 };
+
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Receiver;
+use tokio::time::sleep;
+use tokio::time::Duration;
 
 #[derive(WidgetDisplay)]
 pub struct GameDisplay(pub WidgetBuffer);
 
 impl Widget for GameDisplay {
-	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
 		if self.0.is_empty() {
 			return Ok(());
 		}
-		let bounds_index = line * size_of::<u16>();
+		let bounds_index = line as usize * size_of::<u16>();
 		let bounds = unsafe {
 			(
 				u16::from_le_bytes([
@@ -44,8 +52,8 @@ impl Widget for GameDisplay {
 		write!(f, "{s}")
 	}
 
-	fn size(&self) -> (usize, usize) {
-		(self.0.width as usize, self.0.height as usize)
+	fn size(&self) -> terminity::Size {
+		Size { width: self.0.width as u16, height: self.0.height as u16 }
 	}
 }
 
@@ -55,6 +63,7 @@ impl GameDisplay {
 	}
 }
 
+#[derive(Debug, Default)]
 #[must_use]
 pub struct GameCommands {
 	pub close: bool,
@@ -202,4 +211,56 @@ impl Drop for GameHandle<'_> {
 	fn drop(&mut self) {
 		self.binding.free_game_data(self.binding.close_game());
 	}
+}
+
+struct GameTask {
+	handle: tokio::task::JoinHandle<()>,
+}
+
+fn run_game_task(mut game: GameLib) -> GameTask {
+	let handle = tokio::spawn(async move {
+		let (send, rcv) = mpsc::channel(200);
+		let mut game = unsafe { game.start(rcv) }.unwrap();
+
+		loop {
+			if let Some(display) = game.display() {
+				std::io::stdout()
+					.queue(crossterm::cursor::MoveTo(0, 0))
+					.unwrap()
+					.queue(crossterm::terminal::Clear(crossterm::terminal::ClearType::All))
+					.unwrap()
+					.flush()
+					.unwrap();
+				print!("{}", display);
+				print!("\n\r");
+			}
+
+			sleep(Duration::from_millis(20)).await;
+			while crossterm::event::poll(Duration::ZERO).unwrap() {
+				let Some(event) = events::from_crossterm(crossterm::event::read().unwrap()) else {
+					continue;
+				};
+				send.send(event).await.unwrap();
+			}
+			let cmds = game.tick();
+			if cmds.close {
+				break;
+			}
+		}
+
+		if let Some(display) = game.display() {
+			std::io::stdout()
+				.queue(crossterm::cursor::MoveTo(0, 0))
+				.unwrap()
+				.queue(crossterm::terminal::Clear(crossterm::terminal::ClearType::All))
+				.unwrap()
+				.flush()
+				.unwrap();
+			print!("{}", display);
+			print!("\n\r");
+		}
+
+		game.close_save();
+	});
+	GameTask { handle }
 }

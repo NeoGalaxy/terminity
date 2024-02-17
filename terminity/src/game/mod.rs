@@ -8,15 +8,18 @@ use crate::events::EventPoller;
 pub trait Game {
 	type DataInput: for<'a> Deserialize<'a>;
 	type DataOutput: Serialize;
-	type WidgetKind: Widget;
 
 	fn start<R: io::Read>(data: Option<Self::DataInput>) -> Self;
 
-	fn disp<F: FnOnce(&Self::WidgetKind)>(&mut self, displayer: F);
+	fn disp<D: WidgetDisplayer>(&mut self, displayer: D);
 
 	fn update<E: EventPoller>(&mut self, events: E);
 
 	fn finish(self) -> Option<Self::DataOutput>;
+}
+
+pub trait WidgetDisplayer {
+	fn run<W: Widget>(self, widget: &W);
 }
 
 #[repr(C)]

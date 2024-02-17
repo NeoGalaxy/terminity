@@ -1,5 +1,6 @@
 //! Defines the [Text] widget.
 
+use crate::Size;
 use crate::Widget;
 use crate::WidgetDisplay;
 use std::fmt;
@@ -30,7 +31,7 @@ pub struct Text<const H: usize> {
 	/// The lines of text.
 	pub content: [String; H],
 	/// The width of the text.
-	pub width: usize,
+	pub width: u16,
 	/// How is the text aligned if not long enough.
 	pub align: Align,
 	/// Which character is used for padding. Defaults to `' '`
@@ -40,15 +41,15 @@ pub struct Text<const H: usize> {
 /// Helper functions to build a [`Text`].
 impl<const H: usize> Text<H> {
 	/// A left-aligned text with `' '` as padding character
-	pub fn new(text: [String; H], width: usize) -> Self {
+	pub fn new(text: [String; H], width: u16) -> Self {
 		Self { content: text, align: Align::Left, padding: ' ', width }
 	}
 	/// A centered text with `' '` as padding character
-	pub fn centered(text: [String; H], width: usize) -> Self {
+	pub fn centered(text: [String; H], width: u16) -> Self {
 		Self { content: text, align: Align::Center, padding: ' ', width }
 	}
 	/// A right-aligned text with `' '` as padding character
-	pub fn right_aligned(text: [String; H], width: usize) -> Self {
+	pub fn right_aligned(text: [String; H], width: u16) -> Self {
 		Self { content: text, align: Align::Right, padding: ' ', width }
 	}
 	/// Clears the Text's content.
@@ -60,14 +61,14 @@ impl<const H: usize> Text<H> {
 }
 
 impl<const H: usize> Widget for Text<H> {
-	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
 		let width = String::from_utf8(
-			strip_ansi_escapes::strip(&self.content[line]).map_err(|_| fmt::Error)?,
+			strip_ansi_escapes::strip(&self.content[line as usize]).map_err(|_| fmt::Error)?,
 		)
 		.unwrap()
 		.graphemes(true)
 		.count();
-		let diff = self.width.saturating_sub(width);
+		let diff = self.width.saturating_sub(width as u16);
 		let (left, right) = match self.align {
 			Align::Left => (0, diff),
 			Align::Right => (diff, 0),
@@ -76,14 +77,14 @@ impl<const H: usize> Widget for Text<H> {
 		for _ in 0..left {
 			f.write_char(self.padding)?;
 		}
-		f.write_str(&self.content[line])?;
+		f.write_str(&self.content[line as usize])?;
 		for _ in 0..right {
 			f.write_char(self.padding)?;
 		}
 		Ok(())
 	}
-	fn size(&self) -> (usize, usize) {
-		(self.width, H)
+	fn size(&self) -> Size {
+		Size { width: self.width, height: H as u16 }
 	}
 }
 

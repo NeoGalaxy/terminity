@@ -3,32 +3,28 @@ mod board;
 use std::io;
 use std::time::{Duration, Instant};
 
-use crossterm::event::MouseEvent;
+use board::Board;
+
 use terminity::build_game;
-use terminity::events::{Event, KeyCode, KeyPress, Mouse, MouseButton, MouseKind};
-use terminity::widgets::frame::Frame;
+use terminity::events::{Event, KeyCode, KeyPress, MouseButton, MouseKind};
+use terminity::game::WidgetDisplayer;
 use terminity::widgets::EventBubblingWidget;
 use terminity::{events::EventPoller, game::Game};
-
-use board::{Board, Pos};
-
-use crate::board::Tile;
 
 impl Game for Chess {
 	type DataInput = ();
 	type DataOutput = ();
-	type WidgetKind = Board;
 
 	fn start<R: io::Read>(_data: Option<Self::DataInput>) -> Self {
 		Self { last_blink: Instant::now(), board: Board::default() }
 	}
 
-	fn disp<F: FnOnce(&Self::WidgetKind)>(&mut self, displayer: F) {
-		displayer(&self.board)
+	fn disp<D: WidgetDisplayer>(&mut self, displayer: D) {
+		displayer.run(&self.board)
 	}
 
-	fn update<E: EventPoller>(&mut self, events: E) {
-		for event in events {
+	fn update<E: EventPoller>(&mut self, poller: E) {
+		for event in poller.events() {
 			match event {
 				Event::Mouse(e) => {
 					let tile = self.board.bubble_event(e.clone().into(), |t, _| Some(t?.0));
@@ -52,23 +48,23 @@ impl Game for Chess {
 					}
 				}
 				Event::KeyPress(KeyPress { code: KeyCode::Left, .. }) => {
-					if self.board.cursor_pos.0 > 0 {
-						self.board.cursor_pos.0 -= 1;
+					if self.board.cursor_pos.x > 0 {
+						self.board.cursor_pos.x -= 1;
 					}
 				}
 				Event::KeyPress(KeyPress { code: KeyCode::Right, .. }) => {
-					if self.board.cursor_pos.0 < 7 {
-						self.board.cursor_pos.0 += 1;
+					if self.board.cursor_pos.x < 7 {
+						self.board.cursor_pos.x += 1;
 					}
 				}
 				Event::KeyPress(KeyPress { code: KeyCode::Up, .. }) => {
-					if self.board.cursor_pos.1 < 7 {
-						self.board.cursor_pos.1 += 1;
+					if self.board.cursor_pos.y < 7 {
+						self.board.cursor_pos.y += 1;
 					}
 				}
 				Event::KeyPress(KeyPress { code: KeyCode::Down, .. }) => {
-					if self.board.cursor_pos.1 > 0 {
-						self.board.cursor_pos.1 -= 1;
+					if self.board.cursor_pos.y > 0 {
+						self.board.cursor_pos.y -= 1;
 					}
 				}
 				// Use the auto-padder to handle resize

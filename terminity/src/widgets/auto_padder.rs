@@ -4,6 +4,7 @@ use crossterm::event::MouseEvent;
 use crate::events::Position;
 use crate::widgets::EventBubblingWidget;
 use crate::widgets::ResizableWisget;
+use crate::Size;
 use crate::Widget;
 use crate::WidgetDisplay;
 
@@ -41,17 +42,17 @@ pub struct AutoPadder<W: Widget>(
 	/// The contained widget
 	pub W,
 	/// The targeted size
-	pub (usize, usize),
+	pub Size,
 );
 
 impl<W: Widget> Widget for AutoPadder<W> {
-	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
 		let content_size = self.0.size();
 		let total_size = self.1;
-		let top_padding = (total_size.1.saturating_sub(content_size.1)) / 2;
-		let left_padding = (total_size.0.saturating_sub(content_size.0)) / 2;
-		if line < top_padding || line >= top_padding + content_size.1 {
-			for _ in 0..total_size.0 {
+		let top_padding = (total_size.height.saturating_sub(content_size.height)) / 2;
+		let left_padding = (total_size.width.saturating_sub(content_size.width)) / 2;
+		if line < top_padding || line >= top_padding + content_size.height {
+			for _ in 0..total_size.width {
 				f.write_char(' ')?;
 			}
 		} else {
@@ -59,13 +60,13 @@ impl<W: Widget> Widget for AutoPadder<W> {
 				f.write_char(' ')?;
 			}
 			self.0.display_line(f, line - top_padding)?;
-			for _ in (left_padding + content_size.0)..(total_size.0) {
+			for _ in (left_padding + content_size.width)..(total_size.width) {
 				f.write_char(' ')?;
 			}
 		}
 		Ok(())
 	}
-	fn size(&self) -> (usize, usize) {
+	fn size(&self) -> Size {
 		self.1
 	}
 }
@@ -107,7 +108,7 @@ impl<W: Widget> Widget for AutoPadder<W> {
 // }
 
 impl<W: Widget> ResizableWisget for AutoPadder<W> {
-	fn resize(&mut self, size: (usize, usize)) {
+	fn resize(&mut self, size: Size) {
 		self.1 = size;
 	}
 }

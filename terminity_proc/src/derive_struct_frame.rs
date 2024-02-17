@@ -245,14 +245,14 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 	let mut expanded = quote! {
 		#(#errors)* // Give the errors
 		impl #impl_generics terminity::widgets::Widget for #ident #ty_generics #where_clause {
-			fn display_line(&self, f: &mut core::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
+			fn display_line(&self, f: &mut core::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
 				match line {
 					#(#disp_content,)*
 					_ => panic!("Displaying line out of struct frame"),
 				}
 				Ok(())
 			}
-			fn size(&self) -> (usize, usize) {
+			fn size(&self) -> terminity::Size {
 				(#frame_width, #frame_height)
 			}
 		}
@@ -275,7 +275,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 					String::from_utf8(strip_ansi_escapes::strip(prefix.value()).unwrap())
 						.unwrap()
 						.graphemes(true)
-						.count();
+						.count() as u16;
 				let line_parts = line_parts.into_iter().map(|(((name, _), _line_i), suffix)| {
 					let suffix_len =
 						String::from_utf8(strip_ansi_escapes::strip(suffix.value()).unwrap())
@@ -288,15 +288,15 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 							curr_col += self.#field.size().0 + #suffix_len;
 						},
 						Some(variant) => quote! {
-							if curr_col > column as usize {
+							if curr_col > column {
 								return None;
 							}
-							if curr_col + self.#field.size().0 > column as usize {
+							if curr_col + self.#field.size().0 > column {
 								return Some(#enum_name::#variant(
 										terminity::widgets::EventBubblingWidget::bubble_event(
 											&mut self.#field,
 											crossterm::event::MouseEvent {
-												column: column - curr_col as u16,
+												column: column - curr_col,
 												row,
 												kind,
 												modifiers,

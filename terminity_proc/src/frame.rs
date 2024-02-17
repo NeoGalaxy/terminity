@@ -213,7 +213,7 @@ pub fn parse_frame_lines(
 	errors: &mut Vec<Diagnostic>,
 	content: &[LitStr],
 	widgets_names: Vec<(char, &RefCell<Option<(usize, usize)>>)>,
-) -> Vec<(LitStr, Vec<(((char, usize), usize), LitStr)>)> {
+) -> Vec<(LitStr, Vec<(((char, usize), u16), LitStr)>)> {
 	let mut res_lines = vec![];
 
 	let mut next_uid = 0;
@@ -387,7 +387,7 @@ pub fn parse_frame_lines(
 		for (widget, uid, (line_index, line_end), line_height, _) in indexes.iter().rev() {
 			//let width = content_width.unwrap();
 			line_res.push((
-				((*widget, *uid), *line_height),
+				((*widget, *uid), *line_height as u16),
 				LitStr::new(&line_content[*line_end..last_index], line.span()),
 			));
 			last_index = *line_index;

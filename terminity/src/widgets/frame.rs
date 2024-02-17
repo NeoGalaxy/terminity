@@ -3,6 +3,7 @@ use crate as terminity_widgets;
 use crate::events::Mouse;
 use crate::events::Position;
 use crate::widgets::EventBubblingWidget;
+use crate::Size;
 // For the macros
 use crate::Widget;
 use crossterm::event::MouseEvent;
@@ -61,10 +62,10 @@ use super::BubblingEvent;
 /// "Structure Frames" will be a thing. A structure frame will be implemented through a trait and a
 /// macro, allowing more flexibility in the types of the frame's children.
 pub struct Frame<Key, Coll> {
-	content: Vec<(String, Vec<((Key, usize), String)>)>,
+	content: Vec<(String, Vec<((Key, u16), String)>)>,
 	widgets: Coll,
-	size: (usize, usize),
-	positions: HashMap<Key, (usize, usize)>,
+	size: Size,
+	positions: HashMap<Key, (u16, u16)>,
 	_phantom: PhantomData<Key>,
 }
 
@@ -86,7 +87,7 @@ where
 	///
 	/// If this function seems too complicated to use, consider using the [`frame!`](crate::frame)
 	/// macro, that actually just compiles to an assignation and a `Frame::new` invocation.
-	pub fn new(content: Vec<(String, Vec<((Key, usize), String)>)>, widgets: Coll) -> Self {
+	pub fn new(content: Vec<(String, Vec<((Key, u16), String)>)>, widgets: Coll) -> Self {
 		macro_rules! str_len {
 			($str:expr) => {
 				String::from_utf8(strip_ansi_escapes::strip($str).unwrap())
@@ -96,7 +97,7 @@ where
 			};
 		}
 
-		let size = (content[0].0.len(), content.len());
+		let size = Size { width: str_len!(&content[0].0) as u16, height: content.len() as u16 };
 		let mut positions = HashMap::new();
 		// TODO: cleanup/adapt. This is code from when I tried to implement un-resizable widgets.
 		for (y_pos, (prefix, line)) in content.iter().enumerate() {
@@ -104,11 +105,11 @@ where
 			let mut previous = prefix;
 			for (item, suffix) in line {
 				let item = item.clone();
-				x_pos += str_len!(previous);
+				x_pos += str_len!(previous) as u16;
 				if item.1 == 0 {
-					positions.insert(item.0.clone(), (x_pos, y_pos));
+					positions.insert(item.0.clone(), (x_pos, y_pos as u16));
 				}
-				x_pos += widgets[item.0.clone()].size().0;
+				x_pos += widgets[item.0.clone()].size().width;
 				previous = suffix;
 			}
 		}
@@ -123,7 +124,7 @@ where
 	// TODO: example
 	/// Gives the coordinates of the first occurrence of the element
 	/// of index `element_index` in the collection.
-	pub fn find_pos(&self, element_index: &Key) -> Option<(usize, usize)> {
+	pub fn find_pos(&self, element_index: &Key) -> Option<(u16, u16)> {
 		self.positions.get(element_index).copied()
 	}
 }
@@ -134,8 +135,8 @@ where
 	Coll: Index<Key>,
 	Coll::Output: Widget,
 {
-	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
-		let (begin, widgets_line) = &self.content[line];
+	fn display_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
+		let (begin, widgets_line) = &self.content[line as usize];
 		f.write_str(begin)?;
 		for ((widget_i, w_line), postfix) in widgets_line {
 			self.widgets[widget_i.clone()].display_line(f, *w_line)?;
@@ -143,7 +144,7 @@ where
 		}
 		Ok(())
 	}
-	fn size(&self) -> (usize, usize) {
+	fn size(&self) -> Size {
 		self.size
 	}
 }
@@ -155,9 +156,9 @@ where
 	Coll::Output: Widget,
 {
 	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-		for i in 0..self.size().1 {
+		for i in 0..self.size().height {
 			self.display_line(f, i)?;
-			if i != self.size().1 - 1 {
+			if i != self.size().height - 1 {
 				f.write_str(&format!(
 					"{}\n\r",
 					terminity_widgets::_reexport::Clear(terminity_widgets::_reexport::UntilNewLine)
@@ -195,26 +196,26 @@ where
 		let mut curr_col = String::from_utf8(strip_ansi_escapes::strip(prefix).unwrap())
 			.unwrap()
 			.graphemes(true)
-			.count();
+			.count() as u16;
 
 		let mut found_widget = None;
 
 		for (widget_data, suffix) in row {
-			if curr_col > event_relative_pos.column as usize {
+			if curr_col > event_relative_pos.column {
 				// Nothing found
 				break;
 			}
 			let widget = &mut self.widgets[widget_data.0.clone()];
-			if curr_col + widget.size().0 > event_relative_pos.column as usize {
+			if curr_col + widget.size().width > event_relative_pos.column {
 				found_widget = Some(widget_data.clone());
 				// found widget, current_col is the start of it
 				break;
 			}
-			curr_col += widget.size().0
+			curr_col += widget.size().width
 				+ String::from_utf8(strip_ansi_escapes::strip(suffix).unwrap())
 					.unwrap()
 					.graphemes(true)
-					.count();
+					.count() as u16;
 		}
 
 		if let Some((widget_id, widget_line_index)) = found_widget {
@@ -249,21 +250,21 @@ impl<Key, Coll> DerefMut for Frame<Key, Coll> {
 
 #[cfg(test)]
 mod tests {
-	use crossterm::event::KeyModifiers;
-	use terminity_proc::{frame, StructFrame};
+
+	use terminity_proc::frame;
 
 	use super::*;
 	struct Img {
 		content: Vec<String>,
-		size: (usize, usize),
+		size: Size,
 		event_res: u64,
 	}
 
 	impl Widget for Img {
-		fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result {
-			f.write_str(&self.content[line])
+		fn display_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
+			f.write_str(&self.content[line as usize])
 		}
-		fn size(&self) -> (usize, usize) {
+		fn size(&self) -> Size {
 			self.size
 		}
 	}
@@ -288,12 +289,12 @@ mod tests {
 	fn new_array() {
 		let img1 = Img {
 			content: vec!["Hello ".to_owned(), "~~~~~ ".to_owned()],
-			size: (6, 2),
+			size: Size { width: 6, height: 2 },
 			event_res: 0,
 		};
 		let img2 = Img {
 			content: vec!["World!".to_owned(), "~~~~~~".to_owned()],
-			size: (6, 2),
+			size: Size { width: 6, height: 2 },
 			event_res: 0,
 		};
 		let frame0 = frame!(
@@ -321,47 +322,47 @@ mod tests {
 		let values = vec![
 			Img {
 				content: vec!["A".to_owned(), "1".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 			Img {
 				content: vec!["F".to_owned(), "2".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 			Img {
 				content: vec!["S".to_owned(), "3".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 			Img {
 				content: vec!["Q".to_owned(), "4".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 			Img {
 				content: vec!["E".to_owned(), "5".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 			Img {
 				content: vec!["Z".to_owned(), "6".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 			Img {
 				content: vec!["K".to_owned(), "7".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 			Img {
 				content: vec!["U".to_owned(), "8".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 			Img {
 				content: vec!["O".to_owned(), "9".to_owned(), "é".to_owned()],
-				size: (1, 3),
+				size: Size { width: 1, height: 3 },
 				event_res: 0,
 			},
 		];
@@ -414,7 +415,7 @@ mod tests {
 				"Foo".to_string(),
 				Img {
 					content: vec!["Foo".to_owned(), "Foo".to_owned()],
-					size: (3, 2),
+					size: Size { width: 3, height: 2 },
 					event_res: 0,
 				},
 			),
@@ -422,7 +423,7 @@ mod tests {
 				"Bar".to_string(),
 				Img {
 					content: vec!["Bar".to_owned(), "Bar".to_owned()],
-					size: (3, 2),
+					size: Size { width: 3, height: 2 },
 					event_res: 0,
 				},
 			),
@@ -430,7 +431,7 @@ mod tests {
 				"Foo2".to_string(),
 				Img {
 					content: vec!["Foo".to_owned(), "two".to_owned()],
-					size: (3, 2),
+					size: Size { width: 3, height: 2 },
 					event_res: 0,
 				},
 			),
@@ -438,7 +439,7 @@ mod tests {
 				"Bar2".to_string(),
 				Img {
 					content: vec!["Bar".to_owned(), "two".to_owned()],
-					size: (3, 2),
+					size: Size { width: 3, height: 2 },
 					event_res: 0,
 				},
 			),

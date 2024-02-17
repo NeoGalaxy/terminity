@@ -9,21 +9,27 @@
 use std::fmt;
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::mem::size_of;
+use std::mem::transmute;
+use std::ops::Deref;
 use std::ops::Range;
 
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::events;
 use crate::events::Position;
+use crate::Size;
 
 pub mod auto_padder;
-pub mod canvas;
-pub mod frame;
+// pub mod canvas;
+// pub mod frame;
+pub mod content;
+pub mod positionning;
 pub mod text;
 
 pub struct WidgetLineDisplay<'a, W: Widget + ?Sized> {
 	pub widget: &'a W,
-	pub line: usize,
+	pub line: u16,
 }
 
 impl<'a, W: Widget + ?Sized> Display for WidgetLineDisplay<'a, W> {
@@ -65,7 +71,7 @@ pub trait Widget {
 	/// let formatted = text.get_line_display(1).to_string();
 	/// assert_eq!(formatted, "World");
 	/// ```
-	fn display_line(&self, f: &mut Formatter<'_>, line: usize) -> std::fmt::Result;
+	fn display_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result;
 	/// The current size of the widget, composed of first the width, then the height.
 	///
 	/// ```
@@ -75,13 +81,13 @@ pub trait Widget {
 	/// let text = Text::new(["Hello".into(), "World".into()], 5);
 	/// assert_eq!(text.size(), (5, 2));
 	/// ```
-	fn size(&self) -> (usize, usize);
+	fn size(&self) -> Size;
 
 	fn display_line_in(
 		&self,
 		f: &mut Formatter<'_>,
-		line: usize,
-		bounds: Range<usize>,
+		line: u16,
+		bounds: Range<u16>,
 	) -> std::fmt::Result {
 		let output = self.get_line_display(line).to_string();
 		let res: std::fmt::Result =
@@ -89,13 +95,15 @@ pub trait Widget {
 				.unwrap()
 				.graphemes(true)
 				.enumerate()
-				.skip_while(|(i, _)| *i < bounds.start)
-				.map_while(|(i, s)| if i < bounds.end { Some(f.write_str(s)) } else { None })
+				.skip_while(|(i, _)| *i < bounds.start as usize)
+				.map_while(
+					|(i, s)| if i < bounds.end as usize { Some(f.write_str(s)) } else { None },
+				)
 				.collect();
 		res
 	}
 
-	fn get_line_display(&self, line: usize) -> WidgetLineDisplay<'_, Self> {
+	fn get_line_display(&self, line: u16) -> WidgetLineDisplay<'_, Self> {
 		WidgetLineDisplay { widget: self, line }
 	}
 }
@@ -213,5 +221,90 @@ pub trait ResizableWisget {
 	///
 	/// If the widget can't take the given size, it will take the size the closest possible to the
 	/// aimed size. This is subject to change.
-	fn resize(&mut self, size: (usize, usize));
+	fn resize(&mut self, size: Size);
+}
+
+#[derive(Debug, Clone)]
+pub struct WidgetString {
+	content: Vec<u8>,
+}
+
+impl From<&WidgetStr> for WidgetString {
+	fn from(value: &WidgetStr) -> Self {
+		Self { content: value.content.to_vec() }
+	}
+}
+
+impl Deref for WidgetString {
+	type Target = WidgetStr;
+	fn deref(&self) -> &Self::Target {
+		unsafe { WidgetStr::from_raw(&self.content) }
+	}
+}
+
+#[derive(Debug)]
+pub struct WidgetStr {
+	content: [u8],
+}
+
+struct LineInfo {
+	pos: u16,
+	width: u16,
+}
+
+impl LineInfo {
+	fn from_bytes(bytes: &[u8]) -> Self {
+		Self {
+			pos: u16::from_le_bytes([bytes[0], bytes[1]]),
+			width: u16::from_le_bytes([bytes[2], bytes[3]]),
+		}
+	}
+}
+
+impl WidgetStr {
+	pub fn height(&self) -> u16 {
+		if self.content.is_empty() {
+			0
+		} else {
+			u16::from_le_bytes([self.content[0], self.content[1]])
+		}
+	}
+
+	fn line_info(&self, line: u16) -> LineInfo {
+		if self.content.is_empty() || line > self.height() {
+			return LineInfo { pos: 0, width: 0 };
+		}
+		let len = self.content.len();
+		let pos = len - line as usize * size_of::<LineInfo>();
+		if line == self.height() {
+			let line_pos = [self.content[pos - 2], self.content[pos - 1]];
+			return LineInfo { pos: u16::from_le_bytes(line_pos), width: 0 };
+		}
+		LineInfo::from_bytes(&self.content[pos - (size_of::<LineInfo>())..pos])
+	}
+
+	pub fn line_width(&self, line: u16) -> Option<u16> {
+		if self.content.is_empty() || line >= self.height() {
+			return None;
+		}
+		let info = self.line_info(line);
+		Some(info.width)
+	}
+
+	pub fn line_content(&self, line: u16) -> Option<&str> {
+		if self.content.is_empty() || line >= self.height() {
+			return None;
+		}
+		let info = self.line_info(line);
+		let info_next = self.line_info(line + 1);
+		Some(std::str::from_utf8(&self.content[info.pos as usize..info_next.pos as usize]).unwrap())
+	}
+
+	pub const unsafe fn from_raw(content: &[u8]) -> &Self {
+		transmute(content)
+	}
+
+	pub fn max_width(&self) -> u16 {
+		(0..self.height()).map(|l| self.line_width(l).unwrap()).max().unwrap_or(0)
+	}
 }

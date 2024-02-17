@@ -91,6 +91,8 @@ pub fn from_crossterm(ct_evt: crossterm::event::Event) -> Option<Event> {
 				crossterm::event::MouseEventKind::Moved => MouseKind::Moved,
 				crossterm::event::MouseEventKind::ScrollDown => MouseKind::ScrollDown,
 				crossterm::event::MouseEventKind::ScrollUp => MouseKind::ScrollUp,
+				crossterm::event::MouseEventKind::ScrollLeft
+				| crossterm::event::MouseEventKind::ScrollRight => return None,
 			},
 			position: Position { line: m.row, column: m.column },
 			modifiers: modifiers_from_crossterm(&m.modifiers, None),

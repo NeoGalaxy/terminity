@@ -42,6 +42,7 @@ pub mod widgets;
 
 extern crate self as terminity;
 
+use game::WidgetDisplayer;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::io::Write as _;
@@ -50,6 +51,8 @@ use std::mem::size_of;
 use std::ptr::null;
 
 pub use terminity_proc::frame;
+pub use terminity_proc::img;
+pub use terminity_proc::wstr;
 pub use terminity_proc::StructFrame;
 pub use terminity_proc::WidgetDisplay;
 use widgets::Widget;
@@ -64,10 +67,10 @@ pub mod _reexport {
 	pub use crossterm::terminal::ClearType::UntilNewLine;
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Size {
-	width: u16,
-	height: u16,
+	pub width: u16,
+	pub height: u16,
 }
 
 #[derive(Debug)]
@@ -78,12 +81,24 @@ pub struct WidgetBuffer {
 	pub content: *const u8,
 }
 
+pub struct DisplayToBuffer<'a> {
+	pub buffer: &'a mut String,
+	pub res_buffer: &'a mut WidgetBuffer,
+}
+
+impl WidgetDisplayer for DisplayToBuffer<'_> {
+	fn run<W: Widget>(self, widget: &W) {
+		*self.res_buffer = unsafe { WidgetBuffer::new(widget, self.buffer.as_mut_vec()) };
+	}
+}
+
 impl WidgetBuffer {
 	pub fn new_empty() -> Self {
 		Self { width: 0, height: 0, content: null() }
 	}
 	pub unsafe fn new<W: Widget>(widget: &W, buffer: &mut Vec<u8>) -> Self {
-		let (width, height) = widgets::Widget::size(widget);
+		let Size { width, height } = widgets::Widget::size(widget);
+		let (width, height) = (width as usize, height as usize);
 		buffer.clear();
 
 		// Reserve for the indexes of the lines
@@ -99,7 +114,7 @@ impl WidgetBuffer {
 			buffer[line * size_of::<u16>()] = bytes[0];
 			buffer[line * size_of::<u16>() + 1] = bytes[1];
 
-			write!(buffer, "{}", LineDisp(line, widget)).unwrap();
+			write!(buffer, "{}", LineDisp(line as u16, widget)).unwrap();
 		}
 
 		let line_end = buffer.len();
@@ -115,7 +130,7 @@ impl WidgetBuffer {
 	}
 }
 
-pub struct LineDisp<'a, W: Widget + ?Sized>(pub usize, pub &'a W);
+pub struct LineDisp<'a, W: Widget + ?Sized>(pub u16, pub &'a W);
 impl<W: Widget + ?Sized> Display for LineDisp<'_, W> {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		self.1.display_line(f, self.0)
@@ -154,12 +169,13 @@ macro_rules! build_game {
 
 			#[no_mangle]
 			pub extern "C" fn disp_game() -> $crate::WidgetBuffer {
-				let buffer = unsafe { DISP_BUFFER.as_mut() }.unwrap();
+				let mut buffer = unsafe { DISP_BUFFER.as_mut() }.unwrap();
 				let game = unsafe { GAME.as_mut() }.unwrap();
 				let mut res = $crate::WidgetBuffer::new_empty();
-				$crate::game::Game::disp(game, |w| {
-					res = unsafe { $crate::WidgetBuffer::new(w, buffer.as_mut_vec()) };
-				});
+				$crate::game::Game::disp(
+					game,
+					$crate::DisplayToBuffer { buffer: &mut buffer, res_buffer: &mut res },
+				);
 				res
 			}
 
