@@ -1,6 +1,4 @@
-use std::io;
-
-use crate::Widget;
+use crate::{Size, Widget};
 use serde::{Deserialize, Serialize};
 
 use crate::events::EventPoller;
@@ -9,7 +7,7 @@ pub trait Game {
 	type DataInput: for<'a> Deserialize<'a>;
 	type DataOutput: Serialize;
 
-	fn start<R: io::Read>(data: Option<Self::DataInput>) -> Self;
+	fn start(data: Option<Self::DataInput>, size: Size) -> Self;
 
 	fn disp<D: WidgetDisplayer>(&mut self, displayer: D);
 

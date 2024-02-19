@@ -12,6 +12,7 @@ use std::fmt::Formatter;
 use std::mem::size_of;
 use std::mem::transmute;
 use std::ops::Deref;
+use std::ops::DerefMut;
 use std::ops::Range;
 
 use unicode_segmentation::UnicodeSegmentation;
@@ -105,6 +106,25 @@ pub trait Widget {
 
 	fn get_line_display(&self, line: u16) -> WidgetLineDisplay<'_, Self> {
 		WidgetLineDisplay { widget: self, line }
+	}
+}
+
+impl<'a, W: Widget> Widget for &'a W {
+	fn display_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
+		(*self).display_line(f, line)
+	}
+
+	fn size(&self) -> Size {
+		(*self).size()
+	}
+
+	fn display_line_in(
+		&self,
+		f: &mut Formatter<'_>,
+		line: u16,
+		bounds: Range<u16>,
+	) -> std::fmt::Result {
+		(*self).display_line_in(f, line, bounds)
 	}
 }
 
@@ -242,6 +262,87 @@ impl Deref for WidgetString {
 	}
 }
 
+impl DerefMut for WidgetString {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		unsafe { WidgetStr::from_raw_mut(&mut self.content) }
+	}
+}
+
+impl WidgetString {
+	pub fn push(&mut self, s: &WidgetStr) {
+		if s.content.is_empty() {
+			return;
+		}
+		if self.content.is_empty() {
+			*self = s.into();
+			return;
+		}
+		let additionnal_size =
+			(s.height() - 1) as usize * size_of::<LineInfo>() + s.tot_len() as usize;
+		let old_buffer_size = self.content.len();
+
+		if additionnal_size + self.used_size() as usize > old_buffer_size {
+			self.content.reserve(additionnal_size + self.used_size() as usize - old_buffer_size);
+			for v in self.content.spare_capacity_mut() {
+				v.write(0);
+			}
+			unsafe { self.content.set_len(self.content.capacity()) }
+
+			if old_buffer_size == 0 {
+				// The content is fully set to 0: we need to initialize it
+				self.clear();
+			} else {
+				// From the end of the buffer to the beginning. Also copy the entry
+				// giving the full size
+				for i in 0..=self.height() as usize {
+					// assume the old buffer as valid
+					let info = unsafe {
+						WidgetStr::from_raw(&self.content[0..old_buffer_size]).line_info(i as u16)
+					};
+					// update on the new buffer
+					self.set_line_info(i as u16, &info);
+				}
+			}
+		}
+
+		let mut tot_len = self.tot_len() as usize;
+		let mut curr_line = self.height() - 1;
+		let mut curr_line_width = self.line_width(curr_line).unwrap();
+		{
+			let tmp = self.height() + s.height() - 1;
+			self.set_height(tmp);
+		}
+
+		// do NOT use self.line_width in this loop, it is broken because there's data missing
+		for line_i in 0..s.height() {
+			let line = s.line_content(line_i).unwrap();
+			self.content[tot_len..tot_len + line.len()].copy_from_slice(line.as_bytes());
+			tot_len += line.len();
+			let mut info = self.line_info(curr_line);
+			info.width += s.line_width(line_i).unwrap();
+			self.set_line_info(curr_line, &info);
+			self.set_line_info(
+				curr_line + 1,
+				&LineInfo { pos: info.pos + curr_line_width + line.len() as u16, width: 0 },
+			);
+			curr_line += 1;
+			curr_line_width = 0;
+		}
+
+		debug_assert_eq!(curr_line, self.height());
+	}
+
+	pub fn used_size(&self) -> u16 {
+		self.height() * size_of::<LineInfo>() as u16 + self.tot_len() + 1
+	}
+
+	pub fn clear(&mut self) {
+		self.set_height(1);
+		self.set_line_info(0, &LineInfo { pos: 2, width: 0 });
+		self.set_line_info(1, &LineInfo { pos: 2, width: 0 });
+	}
+}
+
 #[derive(Debug)]
 pub struct WidgetStr {
 	content: [u8],
@@ -259,14 +360,26 @@ impl LineInfo {
 			width: u16::from_le_bytes([bytes[2], bytes[3]]),
 		}
 	}
+
+	fn to_bytes(&self) -> [u8; 4] {
+		let pos = self.pos.to_le_bytes();
+		let width = self.width.to_le_bytes();
+		[pos[0], pos[1], width[0], width[1]]
+	}
 }
 
 impl WidgetStr {
 	pub fn height(&self) -> u16 {
 		if self.content.is_empty() {
-			0
+			1
 		} else {
 			u16::from_le_bytes([self.content[0], self.content[1]])
+		}
+	}
+
+	fn set_height(&mut self, h: u16) {
+		if !self.content.is_empty() {
+			self.content[0..2].copy_from_slice(&h.to_le_bytes());
 		}
 	}
 
@@ -283,8 +396,27 @@ impl WidgetStr {
 		LineInfo::from_bytes(&self.content[pos - (size_of::<LineInfo>())..pos])
 	}
 
+	fn set_line_info(&mut self, line: u16, info: &LineInfo) {
+		if self.content.is_empty() || line > self.height() {
+			return;
+		}
+		let len = self.content.len();
+		let pos = len - line as usize * size_of::<LineInfo>();
+		if line == self.height() {
+			let [pos0, pos1, ..] = info.to_bytes();
+			self.content[pos - 2] = pos0;
+			self.content[pos - 1] = pos1;
+		} else {
+			self.content[pos - (size_of::<LineInfo>())..pos].copy_from_slice(&info.to_bytes())
+		}
+	}
+
+	pub fn tot_len(&self) -> u16 {
+		self.line_info(self.height()).pos
+	}
+
 	pub fn line_width(&self, line: u16) -> Option<u16> {
-		if self.content.is_empty() || line >= self.height() {
+		if line >= self.height() {
 			return None;
 		}
 		let info = self.line_info(line);
@@ -292,8 +424,11 @@ impl WidgetStr {
 	}
 
 	pub fn line_content(&self, line: u16) -> Option<&str> {
-		if self.content.is_empty() || line >= self.height() {
+		if line >= self.height() {
 			return None;
+		}
+		if self.content.is_empty() {
+			return Some("");
 		}
 		let info = self.line_info(line);
 		let info_next = self.line_info(line + 1);
@@ -304,7 +439,56 @@ impl WidgetStr {
 		transmute(content)
 	}
 
+	pub unsafe fn from_raw_mut(content: &mut [u8]) -> &mut Self {
+		transmute(content)
+	}
+
 	pub fn max_width(&self) -> u16 {
 		(0..self.height()).map(|l| self.line_width(l).unwrap()).max().unwrap_or(0)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use terminity_proc::wstr;
+
+	use super::*;
+
+	#[test]
+	fn wstr_push() {
+		let mut s = WidgetString::from(wstr!("Hello I'm a\nwstr on multiple\nlines."));
+		assert_eq!(s.height(), 3);
+		assert_eq!(s.line_content(0), Some("Hello I'm a"));
+		assert_eq!(s.line_content(1), Some("wstr on multiple"));
+		assert_eq!(s.line_content(2), Some("lines."));
+
+		s.push(wstr!(" And now we have\nmore lines.\n"));
+		assert_eq!(s.height(), 5);
+		assert_eq!(s.line_content(0), Some("Hello I'm a"));
+		assert_eq!(s.line_content(1), Some("wstr on multiple"));
+		assert_eq!(s.line_content(2), Some("lines. And now we have"));
+		assert_eq!(s.line_content(3), Some("more lines."));
+		assert_eq!(s.line_content(4), Some(""));
+
+		s.push(wstr!("And even\nmore"));
+		assert_eq!(s.height(), 6);
+		assert_eq!(s.line_content(4), Some("And even"));
+		assert_eq!(s.line_content(5), Some("more"));
+
+		s.push(wstr!(""));
+		assert_eq!(s.height(), 6);
+		assert_eq!(s.line_content(5), Some("more"));
+	}
+
+	#[test]
+	fn wstr_push_empty() {
+		let mut s = WidgetString::from(wstr!(""));
+		assert_eq!(s.content.len(), 0);
+		assert_eq!(s.height(), 1);
+
+		s.push(wstr!("Hello\nworld!"));
+		assert_eq!(s.height(), 2);
+		assert_eq!(s.line_content(0), Some("Hello"));
+		assert_eq!(s.line_content(1), Some("world!"));
 	}
 }

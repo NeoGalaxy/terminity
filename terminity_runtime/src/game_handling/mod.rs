@@ -2,10 +2,10 @@ use crate::events;
 use crossterm::QueueableCommand as _;
 use libloading::{Library, Symbol};
 use std::{
+	convert::AsRef,
+	ffi::OsStr,
 	io::Write as _,
-	marker::PhantomData,
 	mem::{forget, size_of},
-	path::PathBuf,
 	ptr::null_mut,
 	slice,
 };
@@ -91,19 +91,20 @@ impl GameCommands {
 	}
 }
 
+#[derive(Debug)]
 pub struct GameLib {
 	pub game: Library,
 }
 
 impl GameLib {
-	pub unsafe fn new(game_path: PathBuf) -> Result<Self, libloading::Error> {
+	pub unsafe fn new<P: AsRef<OsStr>>(game_path: P) -> Result<Self, libloading::Error> {
 		let game = unsafe { libloading::Library::new(game_path)? };
 		Ok(Self { game })
 	}
 
 	pub unsafe fn start(
-		&mut self,
-		event_canal: Receiver<Event>,
+		&self,
+		event_canal: kanal::Receiver<Event>,
 	) -> Result<GameHandle, libloading::Error> {
 		let handle = GameBinding {
 			start_game: self.game.get(b"start_game\0")?,
@@ -152,11 +153,11 @@ impl GameBinding<'_> {
 pub struct GameHandle<'a> {
 	binding: GameBinding<'a>,
 	event_buffer: Vec<u8>,
-	event_canal: Receiver<Event>,
+	event_canal: kanal::Receiver<Event>,
 }
 
 impl<'a> GameHandle<'a> {
-	fn start(binding: GameBinding<'a>, event_canal: Receiver<Event>) -> Self {
+	fn start(binding: GameBinding<'a>, event_canal: kanal::Receiver<Event>) -> Self {
 		binding.start_game(GameData { content: null_mut(), size: 0, capacity: 0 });
 		Self { binding, event_buffer: Vec::with_capacity(128), event_canal }
 	}
@@ -173,7 +174,7 @@ impl<'a> GameHandle<'a> {
 
 	pub fn tick(&mut self) -> GameCommands {
 		self.event_buffer.clear();
-		while let Ok(evt) = self.event_canal.try_recv() {
+		while let Ok(Some(evt)) = self.event_canal.try_recv() {
 			if matches!(
 				evt,
 				Event::KeyPress(KeyPress {
@@ -200,16 +201,9 @@ impl<'a> GameHandle<'a> {
 		cmds
 	}
 
-	pub fn close_save(self) {
+	pub fn close_save(&mut self) {
 		let data = self.binding.close_game();
 		self.binding.free_game_data(data);
-		forget(self)
-	}
-}
-
-impl Drop for GameHandle<'_> {
-	fn drop(&mut self) {
-		self.binding.free_game_data(self.binding.close_game());
 	}
 }
 
@@ -217,9 +211,9 @@ struct GameTask {
 	handle: tokio::task::JoinHandle<()>,
 }
 
-fn run_game_task(mut game: GameLib) -> GameTask {
+fn run_game_task(game: GameLib) -> GameTask {
 	let handle = tokio::spawn(async move {
-		let (send, rcv) = mpsc::channel(200);
+		let (send, rcv) = kanal::bounded(200);
 		let mut game = unsafe { game.start(rcv) }.unwrap();
 
 		loop {
@@ -240,7 +234,7 @@ fn run_game_task(mut game: GameLib) -> GameTask {
 				let Some(event) = events::from_crossterm(crossterm::event::read().unwrap()) else {
 					continue;
 				};
-				send.send(event).await.unwrap();
+				send.as_async().send(event).await.unwrap();
 			}
 			let cmds = game.tick();
 			if cmds.close {

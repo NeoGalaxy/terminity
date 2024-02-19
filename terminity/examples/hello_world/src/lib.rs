@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Write as _};
-use std::io;
 use terminity::events::Event;
 use terminity::game::WidgetDisplayer;
-use terminity::{build_game, widgets};
+use terminity::{build_game, widgets, Size};
 use terminity::{events::EventPoller, game::Game};
 
 struct DebugAsDisplay<T: Debug>(T);
@@ -18,7 +17,7 @@ impl Game for HelloWorld {
 	type DataInput = ();
 	type DataOutput = ();
 
-	fn start<R: io::Read>(_data: Option<Self::DataInput>) -> Self {
+	fn start(_data: Option<Self::DataInput>, _size: Size) -> Self {
 		HelloWorld { events: VecDeque::with_capacity(40), frame: 0 }
 	}
 
@@ -45,7 +44,7 @@ impl Game for HelloWorld {
 			*nb_iter += 1;
 			write!(array_buf, "{:?}", event).unwrap();
 		}
-		displayer.run(&widgets::text::Text::new(array, 230));
+		displayer.run(&widgets::text::Text::new(array, 30));
 	}
 
 	fn update<E: EventPoller>(&mut self, events: E) {

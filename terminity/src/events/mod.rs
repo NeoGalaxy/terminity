@@ -211,7 +211,7 @@ impl Iterator for EventReaderIter<'_, '_> {
 	}
 }
 
-impl<'evts> EventPoller for &mut EventReader<'evts> {
+impl<'evts> EventPoller for &EventReader<'evts> {
 	type Iter<'a> = EventReaderIter<'a, 'evts> where Self: 'a;
 
 	fn cmd(&self, evt: CommandEvent) {

@@ -16,7 +16,7 @@ pub fn run(input: LitStr) -> (TokenStream, Vec<Diagnostic>) {
 		None => (
 			quote! {
 				unsafe{
-					terminity::widgets::WidgetStr::from_raw(&[]);
+					terminity::widgets::WidgetStr::from_raw(&[])
 				}
 			},
 			vec![],

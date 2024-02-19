@@ -1,8 +1,5 @@
 //! Defines the [AutoPadder] widget.
-use crossterm::event::MouseEvent;
 
-use crate::events::Position;
-use crate::widgets::EventBubblingWidget;
 use crate::widgets::ResizableWisget;
 use crate::Size;
 use crate::Widget;

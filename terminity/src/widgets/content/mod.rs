@@ -12,12 +12,15 @@ pub struct TextArea {
 }
 
 impl TextArea {
-	pub fn center(text: &WidgetStr) -> Self {
-		Self {
-			content: text.into(),
-			horizontal_alignment: Position::Center,
-			size: Size { width: text.max_width(), height: text.height() },
-		}
+	pub fn center<S: Into<WidgetString>>(text: S) -> Self {
+		let text = text.into();
+		let size = Size { width: text.max_width(), height: text.height() };
+		Self { content: text, horizontal_alignment: Position::Center, size }
+	}
+	pub fn set_content<S: Into<WidgetString>>(&mut self, text: S) {
+		self.content = text.into();
+		self.size.width = self.content.max_width();
+		self.size.height = self.content.height();
 	}
 }
 
@@ -41,18 +44,24 @@ impl Widget for TextArea {
 }
 
 #[derive(Debug, Clone)]
-pub struct Img {
-	pub content: &'static WidgetStr,
+pub struct Img<'a> {
+	pub content: &'a WidgetStr,
 	size: Size,
 }
 
-impl Img {
-	pub const unsafe fn from_raw_parts(content: &'static WidgetStr, size: Size) -> Self {
+#[derive(Debug, Clone)]
+pub struct ImgBuffer {
+	pub content: WidgetString,
+	size: Size,
+}
+
+impl<'a> Img<'a> {
+	pub const unsafe fn from_raw_parts(content: &'a WidgetStr, size: Size) -> Self {
 		Img { content, size }
 	}
 }
 
-impl Widget for Img {
+impl Widget for Img<'_> {
 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
 		f.write_str(self.content.line_content(line).unwrap())
 	}

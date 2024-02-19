@@ -1,21 +1,20 @@
 mod board;
 
-use std::io;
 use std::time::{Duration, Instant};
 
 use board::Board;
 
-use terminity::build_game;
 use terminity::events::{Event, KeyCode, KeyPress, MouseButton, MouseKind};
 use terminity::game::WidgetDisplayer;
 use terminity::widgets::EventBubblingWidget;
+use terminity::{build_game, Size};
 use terminity::{events::EventPoller, game::Game};
 
 impl Game for Chess {
 	type DataInput = ();
 	type DataOutput = ();
 
-	fn start<R: io::Read>(_data: Option<Self::DataInput>) -> Self {
+	fn start(_data: Option<Self::DataInput>, _size: Size) -> Self {
 		Self { last_blink: Instant::now(), board: Board::default() }
 	}
 

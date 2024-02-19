@@ -149,7 +149,12 @@ macro_rules! build_game {
 			static mut CMD_BUFFER: Option<Vec<u8>> = None;
 
 			#[no_mangle]
-			pub unsafe extern "C" fn start_game(data: $crate::game::GameData) {
+			pub unsafe extern "C" fn start_game(
+				data: $crate::game::GameData,
+				width: u16,
+				height: u16,
+			) {
+				let size = $crate::Size { width, height };
 				let data = if data.content.is_null() {
 					None
 				} else {
@@ -158,13 +163,14 @@ macro_rules! build_game {
 						data.size as usize,
 						data.capacity as usize,
 					);
-					Some($crate::_bincode::deserialize::<<$GAME as $crate::game::Game>::DataInput>(
+					$crate::_bincode::deserialize::<<$GAME as $crate::game::Game>::DataInput>(
 						&data_vec,
-					))
+					)
+					.ok()
 				};
 				unsafe { DISP_BUFFER = Some(String::with_capacity(32)) }
 				unsafe { CMD_BUFFER = Some(Vec::new()) }
-				unsafe { GAME = Some($crate::game::Game::start::<std::fs::File>(None)) }
+				unsafe { GAME = Some($crate::game::Game::start(data, size)) }
 			}
 
 			#[no_mangle]
@@ -188,7 +194,7 @@ macro_rules! build_game {
 				let commands_buffer = unsafe { CMD_BUFFER.take().unwrap() };
 				let mut evt_reader = $crate::events::EventReader::new(events, commands_buffer);
 				let game = unsafe { GAME.as_mut() }.unwrap();
-				$crate::game::Game::update(game, &mut evt_reader);
+				$crate::game::Game::update(game, &evt_reader);
 				evt_reader.into_commands_data()
 			}
 

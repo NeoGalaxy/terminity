@@ -189,6 +189,7 @@ pub fn frame(tokens: TokenStream) -> TokenStream {
 	proc_macro::TokenStream::from(tokens)
 }
 
+#[proc_macro_error]
 #[proc_macro_derive(StructFrame, attributes(sf_impl, sf_layout))]
 pub fn struct_frame(tokens: TokenStream) -> TokenStream {
 	let (tokens, errors) = derive_struct_frame::run(parse_macro_input!(tokens as DeriveInput));

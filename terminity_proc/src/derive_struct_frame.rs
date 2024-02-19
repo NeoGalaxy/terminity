@@ -15,8 +15,7 @@ use syn::{
 	token, DeriveInput, Ident, LitChar, LitStr, Member, Token,
 };
 
-use crate::frame::parse_frame_lines;
-use unicode_segmentation::UnicodeSegmentation;
+use crate::frame::{parse_frame_lines, FrameLine, WidgetLine};
 
 struct LayoutArgs {
 	args: Punctuated<LitStr, Token![,]>,
@@ -54,11 +53,20 @@ struct SFImplArgs {
 	bubble_event: Option<()>,
 }
 
-#[derive(FromMeta)]
+#[derive(FromMeta, Debug)]
 struct AttributeLayoutArgs {
 	name: LitChar,
 	#[darling(default)]
 	ignore_mouse_event: bool,
+}
+
+#[derive(Debug)]
+struct FieldDetails<FieldWidget: Fn(TokenStream, bool) -> TokenStream> {
+	field_widget: FieldWidget, // It's this way because of `use_parent`
+	enum_variant: Option<Ident>,
+	field_ty: syn::Type,
+	field_widget_ty: TokenStream, // Exists because it was needed by `use_parent`
+	size: RefCell<Option<(usize, usize)>>,
 }
 
 pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
@@ -76,7 +84,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				Span::call_site(),
 				Level::Error,
 				concat!(
-					"Expecting ONE `#[sf_layout {{}}]` attribute on the struct ",
+					"Expecting ONE `#[sf_layout (...)]` attribute on the struct ",
 					"to indicate the frame's layout."
 				)
 				.into(),
@@ -128,7 +136,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				Level::Error,
 				"Can't build a struct frame from a union.".into(),
 			));
-			todo!()
+			Default::default()
 		}
 		syn::Data::Enum(_) => {
 			errors.push(Diagnostic::spanned(
@@ -136,7 +144,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				Level::Error,
 				"Can't build a struct frame from an enum.".into(),
 			));
-			todo!()
+			Default::default()
 		}
 		syn::Data::Struct(content) => {
 			let mut res = HashMap::new();
@@ -175,13 +183,18 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 					}
 				};
 
-				let details = (
-					// Field name to access the field
-					f.ident.as_ref().map(|i| Member::Named(i.clone())).unwrap_or(Member::Unnamed(
-						syn::Index { index: field_index as u32, span: f.span() },
-					)),
+				let field = f.ident.as_ref().map(|i| Member::Named(i.clone())).unwrap_or(
+					Member::Unnamed(syn::Index { index: field_index as u32, span: f.span() }),
+				);
+
+				let details = FieldDetails {
+					// Accessing the widget
+					field_widget: move |parent, mutable| {
+						let m = if mutable { quote!("mut") } else { quote!() };
+						quote!((&#m #parent.#field))
+					},
 					// Corresponding enum variant
-					if attr_details.ignore_mouse_event {
+					enum_variant: if attr_details.ignore_mouse_event {
 						None
 					} else {
 						Some(Ident::new(
@@ -193,10 +206,12 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 						))
 					},
 					// Type
-					f.ty,
+					field_ty: f.ty,
+					// Widget Type
+					field_widget_ty: quote!(f.ty),
 					// Size
-					RefCell::new(None),
-				);
+					size: RefCell::new(None),
+				};
 				if res.insert(attr_details.name.value(), details).is_some() {
 					errors.push(Diagnostic::spanned(
 						attr_details.name.span(),
@@ -212,38 +227,41 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 		}
 	};
 
-	let mut errors = vec![];
 	let mut frame_width = None;
 
 	let layout_body = parse_frame_lines(
 		&mut frame_width,
 		&mut errors,
 		&layout_content.args.into_iter().collect::<Vec<_>>(),
-		widget_indexes.iter().map(|(name, (_, _, _, size))| (*name, size)).collect(),
+		widget_indexes.iter().map(|(name, details)| (*name, &details.size)).collect::<Vec<_>>(),
 	);
 
-	let frame_width = frame_width.expect("Error: Empty struct frame layout");
-	let frame_height = layout_body.len();
+	let frame_width = frame_width.expect("Error: Empty struct frame layout") as u16;
+	let frame_height = layout_body.len() as u16;
 
 	let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-	let disp_content =
-		layout_body.iter().cloned().enumerate().map(|(line, (prefix, line_parts))| {
-			let line_parts = line_parts.into_iter().map(|(((name, _), line_i), suffix)| {
-				let (field, ..) = &widget_indexes[&name];
-				quote! {
-					self.#field.display_line(f, #line_i)?;
-					f.write_str(#suffix)?;
-				}
-			});
+	let disp_content = layout_body.iter().cloned().enumerate().map(
+		|(line, FrameLine { prefix, line_content })| {
+			let line = line as u16;
+			let line_parts = line_content.into_iter().map(
+				|(WidgetLine { widget_char, line_index, .. }, suffix)| {
+					let FieldDetails { field_widget, .. } = &widget_indexes[&widget_char];
+					let w = field_widget(quote!(self), false);
+					quote! {
+						#w.display_line(f, #line_index)?;
+						f.write_str(#suffix)?;
+					}
+				},
+			);
 			quote!(#line => {
 				f.write_str(#prefix)?;
 				#(#line_parts)*
 			})
-		});
+		},
+	);
 
-	let mut expanded = quote! {
-		#(#errors)* // Give the errors
+	let expanded = quote! {
 		impl #impl_generics terminity::widgets::Widget for #ident #ty_generics #where_clause {
 			fn display_line(&self, f: &mut core::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
 				match line {
@@ -253,94 +271,100 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				Ok(())
 			}
 			fn size(&self) -> terminity::Size {
-				(#frame_width, #frame_height)
+				terminity::Size{
+					width: #frame_width,
+					height: #frame_height,
+				}
 			}
 		}
 	};
 
-	if all_impls.bubble_event == Some(()) {
-		let enum_name = Ident::new(&(ident.to_string() + "MouseEvents"), ident.span());
+	// TODO: support mouse events
+	// if all_impls.bubble_event == Some(()) {
+	// 	let enum_name = Ident::new(&(ident.to_string() + "MouseEvents"), ident.span());
 
-		let enum_variants =
-			widget_indexes.values().map(|(_, variant, field_type, _)| match variant {
-				Some(v) => quote! {
-					#v(<#field_type as terminity::widgets::EventBubblingWidget>::HandledEvent),
-				},
-				None => quote!(),
-			});
+	// 	let enum_variants = widget_indexes.values().map(
+	// 		|FieldDetails { enum_variant, field_widget_ty, .. }| match enum_variant {
+	// 			Some(v) => quote! {
+	// 				#v(<#field_widget_ty as terminity::widgets::EventBubblingWidget>::HandledEvent),
+	// 			},
+	// 			None => quote!(),
+	// 		},
+	// 	);
 
-		let mouse_event_content =
-			layout_body.iter().cloned().enumerate().map(|(line, (prefix, line_parts))| {
-				let prefix_len =
-					String::from_utf8(strip_ansi_escapes::strip(prefix.value()).unwrap())
-						.unwrap()
-						.graphemes(true)
-						.count() as u16;
-				let line_parts = line_parts.into_iter().map(|(((name, _), _line_i), suffix)| {
-					let suffix_len =
-						String::from_utf8(strip_ansi_escapes::strip(suffix.value()).unwrap())
-							.unwrap()
-							.graphemes(true)
-							.count();
-					let (field, enum_variant, _, _) = &widget_indexes[&name];
-					match enum_variant {
-						None => quote! {
-							curr_col += self.#field.size().0 + #suffix_len;
-						},
-						Some(variant) => quote! {
-							if curr_col > column {
-								return None;
-							}
-							if curr_col + self.#field.size().0 > column {
-								return Some(#enum_name::#variant(
-										terminity::widgets::EventBubblingWidget::bubble_event(
-											&mut self.#field,
-											crossterm::event::MouseEvent {
-												column: column - curr_col,
-												row,
-												kind,
-												modifiers,
-											}
-										)
-									)
-								);
-							}
-							curr_col += self.#field.size().0 + #suffix_len;
-						},
-					}
-				});
-				quote!(#line => {
-					let mut curr_col = #prefix_len;
-					#(#line_parts)*
-					None
-				})
-			});
+	// 	let mouse_event_content =
+	// 		layout_body.iter().cloned().enumerate().map(|(line, (prefix, line_parts))| {
+	// 			let prefix_len =
+	// 				String::from_utf8(strip_ansi_escapes::strip(prefix.value()).unwrap())
+	// 					.unwrap()
+	// 					.graphemes(true)
+	// 					.count() as u16;
+	// 			let line_parts = line_parts.into_iter().map(|(((name, _), _line_i), suffix)| {
+	// 				let suffix_len =
+	// 					String::from_utf8(strip_ansi_escapes::strip(suffix.value()).unwrap())
+	// 						.unwrap()
+	// 						.graphemes(true)
+	// 						.count();
+	// 				let details = &widget_indexes[&name];
+	// 				let w = (details.field_widget)(quote!(self), false);
+	// 				match &details.enum_variant {
+	// 					None => quote! {
+	// 						curr_col += #w.size().0 + #suffix_len;
+	// 					},
+	// 					Some(variant) => quote! {
+	// 						if curr_col > column {
+	// 							return None;
+	// 						}
+	// 						if curr_col + #w.size().0 > column {
+	// 							return Some(#enum_name::#variant(
+	// 									terminity::widgets::EventBubblingWidget::bubble_event(
+	// 										&mut #w,
+	// 										crossterm::event::MouseEvent {
+	// 											column: column - curr_col,
+	// 											row,
+	// 											kind,
+	// 											modifiers,
+	// 										}
+	// 									)
+	// 								)
+	// 							);
+	// 						}
+	// 						curr_col += #w.size().0 + #suffix_len;
+	// 					},
+	// 				}
+	// 			});
+	// 			quote!(#line => {
+	// 				let mut curr_col = #prefix_len;
+	// 				#(#line_parts)*
+	// 				None
+	// 			})
+	// 		});
 
-		expanded.extend(quote! {
-			#[derive(Clone, PartialEq, Eq, Debug)]
-			enum #enum_name {
-				#(#enum_variants)*
-			}
+	// 	 expanded.extend(quote! {
+	// 	 	#[derive(Clone, PartialEq, Eq, Debug)]
+	// 	 	enum #enum_name {
+	// 	 		#(#enum_variants)*
+	// 	 	}
 
-			impl #impl_generics terminity::widgets::EventBubblingWidget for #ident #ty_generics #where_clause {
-				type FinalWidgetData<'a> = ();
-				/// Handles a mouse event. see the [trait](Self)'s doc for more details.
-				fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>) -> R>(
-					&'a mut self,
-					event: crossterm::event::MouseEvent,
-					widget_pos: Position,
-					callback: F,
-				) -> R {
-					todo!()
-					// let crossterm::event::MouseEvent { column, row, kind, modifiers } = event;
-					// match row as usize {
-					// 	#(#mouse_event_content)*
-					// 	_ => None,
-					// }
-				}
-			}
-		});
-	}
+	// 	 	impl #impl_generics terminity::widgets::EventBubblingWidget for #ident #ty_generics #where_clause {
+	// 	 		type FinalWidgetData<'a> = ();
+	// 	 		/// Handles a mouse event. see the [trait](Self)'s doc for more details.
+	// 	 		fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>) -> R>(
+	// 	 			&'a mut self,
+	// 	 			event: crossterm::event::MouseEvent,
+	// 	 			widget_pos: Position,
+	// 	 			callback: F,
+	// 	 		) -> R {
+	// 	 			todo!()
+	// 	 			// let crossterm::event::MouseEvent { column, row, kind, modifiers } = event;
+	// 	 			// match row as usize {
+	// 	 			// 	#(#mouse_event_content)*
+	// 	 			// 	_ => None,
+	// 	 			// }
+	// 	 		}
+	// 	 	}
+	// 	 });
+	// }
 
 	(expanded, errors)
 }
@@ -353,7 +377,7 @@ mod tests {
 	fn a() {
 		let input = quote! {
 			#[sf_impl(EventBubblingWidget)]
-			#[sf_layout {
+			#[sf_layout (
 				"*-------------*",
 				"| HHHHHHHHHHH |",
 				"|   ccccccc   |",
@@ -361,7 +385,7 @@ mod tests {
 				"|   ccccccc   |",
 				"| FFFFFFFFFFF |",
 				"*-------------*",
-			}]
+			)]
 			struct MyFrame {
 				#[sf_layout(name = 'c')]
 				content: Img,
@@ -378,6 +402,66 @@ mod tests {
 		let (result, errors) = run(parse2(input).unwrap());
 		println!("{}", result);
 		println!("--------------------------");
-		println!("{:?}", errors);
+		println!("{:#?}", errors);
+		assert!(errors.is_empty());
+	}
+
+	#[test]
+	fn b() {
+		let input = quote! {
+			#[sf_impl(EventBubblingWidget)]
+			#[sf_layout (
+				"*-------------*",
+				"| HHHHHHHHHHH |",
+				"|   ccccccc   |",
+				"| l ccccccc r |",
+				"|   ccccccc   |",
+				"| FFFFFFFFFFF |",
+				"*-------------*",
+			)]
+			struct MyFrame {
+				#[sf_layout(name = 'c')]
+				content: Img,
+				#[sf_layout(name = 'H')]
+				header: Img,
+				#[sf_layout(name = 'l')]
+				left: Img,
+				#[sf_layout(name = 'r')]
+				right: Img,
+				#[sf_layout(name = 'F')]
+				footer: Img,
+			}
+		};
+		let (result, errors) = run(parse2(input).unwrap());
+		println!("{}", result);
+		println!("--------------------------");
+		println!("{:#?}", errors);
+		assert!(errors.is_empty());
+	}
+
+	#[test]
+	fn c() {
+		let input = quote! {
+			#[sf_layout("0 1 2 3", "0 1 2 3", "0 1 2 3")]
+			pub struct TabSelect {
+				#[sf_layout(name = '0')]
+				left_border: Border,
+				#[sf_layout(name = '1')]
+				left_center_border: Border,
+				#[sf_layout(name = '2')]
+				right_center_border: Border,
+				#[sf_layout(name = '3')]
+				right_border: Border,
+
+				selected: u8,
+			}
+
+		};
+
+		let (result, errors) = run(parse2(input).unwrap());
+		println!("{}", result);
+		println!("--------------------------");
+		println!("{:#?}", errors);
+		assert!(errors.is_empty());
 	}
 }
