@@ -1,8 +1,8 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Write as _};
-use std::io;
 use terminity::events::Event;
-use terminity::{build_game, widgets};
+use terminity::game::WidgetDisplayer;
+use terminity::{build_game, widgets, Size};
 use terminity::{events::EventPoller, game::Game};
 
 struct DebugAsDisplay<T: Debug>(T);
@@ -16,20 +16,19 @@ impl<T: Debug> Display for DebugAsDisplay<T> {
 impl Game for HelloWorld {
 	type DataInput = ();
 	type DataOutput = ();
-	type WidgetKind = widgets::text::Text<30>;
 
-	fn start<R: io::Read>(_data: Option<Self::DataInput>) -> Self {
+	fn start(_data: Option<Self::DataInput>, _size: Size) -> Self {
 		HelloWorld { events: VecDeque::with_capacity(40), frame: 0 }
 	}
 
-	fn disp<F: FnOnce(&Self::WidgetKind)>(&mut self, displayer: F) {
+	fn disp<D: WidgetDisplayer>(&mut self, displayer: D) {
 		self.frame += 1;
 		let mut array: [String; 30] = Default::default();
-		array[0] = "                             ------------------------".into();
+		array[0] = "#*#*------------------------".into();
 		array[1] = "".into();
-		array[2] = "                                    Hello world!".into();
+		array[2] = "         Hello world!".into();
 		array[3] = "".into();
-		array[4] = "                             ------------------------".into();
+		array[4] = "#*#*------------------------".into();
 		array[5] = format!("                                 frame: {:?}", self.frame);
 		let mut n = 0;
 		while self.events.front().map_or(false, |v| v.1 > 50) {
@@ -45,11 +44,11 @@ impl Game for HelloWorld {
 			*nb_iter += 1;
 			write!(array_buf, "{:?}", event).unwrap();
 		}
-		displayer(&widgets::text::Text::new(array, 230));
+		displayer.run(&widgets::text::Text::new(array, 30));
 	}
 
 	fn update<E: EventPoller>(&mut self, events: E) {
-		self.events.extend(events.map(|v| (v, 0)));
+		self.events.extend(events.events().map(|v| (v, 0)));
 	}
 
 	fn finish(self) -> Option<Self::DataOutput> {

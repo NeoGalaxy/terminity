@@ -3,7 +3,7 @@ use crossterm::event::MouseEvent;
 use crate::{
 	events::Position,
 	widgets::{EventBubblingWidget, ResizableWisget},
-	Widget,
+	Size, Widget,
 };
 
 #[derive(Debug)]
@@ -60,31 +60,33 @@ impl<E: Widget, BG: Widget> Canvas<E, BG> {
 }
 
 impl<E: Widget, BG: Widget> Widget for Canvas<E, BG> {
-	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
+	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
 		self.background.display_line(f, line)?;
 		for elm in &self.elements {
 			let elm_size = elm.widget.size();
 			let elm_line = line as i32 - elm.pos.y;
-			if elm_line >= 0 || (elm_line as usize) < elm_size.1 {
-				elm.widget.display_line(f, elm_line as usize)?;
+			if elm_line >= 0 || (elm_line) < elm_size.height as i32 {
+				elm.widget.display_line(f, elm_line as u16)?;
 
 				// If pos < 0, then clip
 				let x_start = 0.max(-elm.pos.x);
 
 				// If pos + size > self.size, then clip
-				let x_end =
-					self.size().0.min(0.max(elm.pos.x + elm_size.0 as i32).try_into().unwrap());
+				let x_end = self
+					.size()
+					.width
+					.min(0.max(elm.pos.x + elm_size.width as i32).try_into().unwrap());
 
 				elm.widget.display_line_in(
 					f,
-					elm_line as usize,
+					elm_line as u16,
 					x_start.try_into().unwrap()..x_end,
 				)?;
 			}
 		}
 		Ok(())
 	}
-	fn size(&self) -> (usize, usize) {
+	fn size(&self) -> Size {
 		self.background.size()
 	}
 	// TODO: display_line_in
@@ -130,7 +132,7 @@ pub enum CanvasEvent<EEvt, BGEvt> {
 // }
 
 impl<E, BG: ResizableWisget> ResizableWisget for Canvas<E, BG> {
-	fn resize(&mut self, size: (usize, usize)) {
+	fn resize(&mut self, size: Size) {
 		self.background.resize(size)
 	}
 }

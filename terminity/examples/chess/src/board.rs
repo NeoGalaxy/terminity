@@ -6,9 +6,14 @@ use std::{
 use terminity::{
 	events::Position,
 	widgets::{EventBubblingWidget, Widget},
+	Size,
 };
 
-pub type Pos = (usize, usize);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Pos {
+	pub x: u16,
+	pub y: u16,
+}
 
 /// The style configuration for the board. Check out Board::default for default value
 pub struct BoardStyle {
@@ -33,26 +38,26 @@ impl Tile {
 		curr_pos != new_pos
 			&& match self.0 {
 				Piece::King => {
-					(curr_pos.0).abs_diff(new_pos.0) <= 1 && (curr_pos.1).abs_diff(new_pos.1) <= 1
+					(curr_pos.x).abs_diff(new_pos.x) <= 1 && (curr_pos.y).abs_diff(new_pos.y) <= 1
 				}
 				Piece::Rook => {
-					if curr_pos.0 == new_pos.0 {
-						let max = new_pos.1.max(curr_pos.1);
-						let min = new_pos.1.min(curr_pos.1);
+					if curr_pos.x == new_pos.x {
+						let max = new_pos.y.max(curr_pos.y);
+						let min = new_pos.y.min(curr_pos.y);
 						// Check if there's no piece between curr_pos and new_pos, both excluded.
-						((min + 1)..max).all(|y| board[(curr_pos.0, y)].is_none())
-					} else if curr_pos.1 == new_pos.1 {
-						let max = new_pos.0.max(curr_pos.0);
-						let min = new_pos.0.min(curr_pos.0);
+						((min + 1)..max).all(|y| board[Pos { x: curr_pos.x, y }].is_none())
+					} else if curr_pos.y == new_pos.y {
+						let max = new_pos.x.max(curr_pos.x);
+						let min = new_pos.x.min(curr_pos.x);
 						// Ditto
-						((min + 1)..max).all(|x| board[(x, curr_pos.1)].is_none())
+						((min + 1)..max).all(|x| board[Pos { x, y: curr_pos.y }].is_none())
 					} else {
 						false
 					}
 				}
 				Piece::Bishop => {
-					let dx = (curr_pos.0).abs_diff(new_pos.0);
-					let dy = (curr_pos.1).abs_diff(new_pos.1);
+					let dx = (curr_pos.x).abs_diff(new_pos.x);
+					let dy = (curr_pos.y).abs_diff(new_pos.y);
 					// Moves as much on x axis as on y axis
 					dx == dy
 					// No one in the way
@@ -60,38 +65,38 @@ impl Tile {
 							// Create positions
 							.map(|d| {
 								(
-									(curr_pos.0 as isize)
-										+ d as isize * if curr_pos.0 < new_pos.0 { 1 } else { -1 },
-									(curr_pos.1 as isize)
-										+ d as isize * if curr_pos.1 < new_pos.1 { 1 } else { -1 },
+									(curr_pos.x as isize)
+										+ d as isize * if curr_pos.x < new_pos.x { 1 } else { -1 },
+									(curr_pos.y as isize)
+										+ d as isize * if curr_pos.y < new_pos.y { 1 } else { -1 },
 								)
 							})
-							.all(|pos| board[(pos.0 as usize, pos.1 as usize)].is_none())
+							.all(|pos| board[Pos{x: pos.0 as u16, y: pos.1 as u16}].is_none())
 				}
 				Piece::Queen => {
 					Tile(Piece::Rook, self.1).move_valid(curr_pos, new_pos, board)
 						|| Tile(Piece::Bishop, self.1).move_valid(curr_pos, new_pos, board)
 				}
 				Piece::Knight => {
-					let dx = (curr_pos.0).abs_diff(new_pos.0);
-					let dy = (curr_pos.1).abs_diff(new_pos.1);
+					let dx = (curr_pos.x).abs_diff(new_pos.x);
+					let dy = (curr_pos.y).abs_diff(new_pos.y);
 					dx == 1 && dy == 2 || dx == 2 && dy == 1
 				}
 				Piece::Pawn => {
-					let going_formard = (self.1 == Color::White && curr_pos.1 + 1 == new_pos.1)
-						|| (self.1 == Color::Black && curr_pos.1 - 1 == new_pos.1);
+					let going_formard = (self.1 == Color::White && curr_pos.y + 1 == new_pos.y)
+						|| (self.1 == Color::Black && curr_pos.y - 1 == new_pos.y);
 					// First move
 					(
-						(curr_pos.1 == 1 || curr_pos.1 == 6) // Didn't move (or 1 away from queen)
-						&& curr_pos.0 == new_pos.0 // Move straight
-						&& curr_pos.1.abs_diff(new_pos.1) == 2 // Moves by 2
-						&& board[(new_pos.0, (curr_pos.1 + new_pos.1) / 2)].is_none() // No one in path
+						(curr_pos.y == 1 || curr_pos.y == 6) // Didn't move (or 1 away from queen)
+						&& curr_pos.x == new_pos.x // Move straight
+						&& curr_pos.y.abs_diff(new_pos.y) == 2 // Moves by 2
+						&& board[Pos{x: new_pos.x, y: (curr_pos.y + new_pos.y) / 2}].is_none() // No one in path
 						&& board[*new_pos].is_none() // Not eating
 					)
 					// Other moves
 					|| going_formard
-						&& ((curr_pos.0).abs_diff(new_pos.0) == 1 && board[*new_pos].is_some()
-							|| curr_pos.0 == new_pos.0 && board[*new_pos].is_none())
+						&& ((curr_pos.x).abs_diff(new_pos.x) == 1 && board[*new_pos].is_some()
+							|| curr_pos.x == new_pos.x && board[*new_pos].is_none())
 				}
 			}
 	}
@@ -136,14 +141,14 @@ impl Piece {
 
 impl Index<Pos> for Board {
 	type Output = Option<Tile>;
-	fn index(&self, (x, y): Pos) -> &Self::Output {
-		&self.tiles[y][x]
+	fn index(&self, Pos { x, y }: Pos) -> &Self::Output {
+		&self.tiles[y as usize][x as usize]
 	}
 }
 
 impl IndexMut<Pos> for Board {
-	fn index_mut(&mut self, (x, y): Pos) -> &mut Self::Output {
-		&mut self.tiles[y][x]
+	fn index_mut(&mut self, Pos { x, y }: Pos) -> &mut Self::Output {
+		&mut self.tiles[y as usize][x as usize]
 	}
 }
 
@@ -197,7 +202,7 @@ impl Board {
 					{
 						let mut tile = *tile;
 						// Promotion (assumes that the pawn didn't find a way to move backwards)
-						if tile.0 == Piece::Pawn && (cursor_pos.1 == 0 || cursor_pos.1 == 7) {
+						if tile.0 == Piece::Pawn && (cursor_pos.y == 0 || cursor_pos.y == 7) {
 							tile.0 = Piece::Queen;
 						}
 						// Move piece
@@ -243,12 +248,9 @@ impl Board {
 	}
 	/// Lists all the tiles with their coordinates
 	pub fn indexed_tiles<'a>(&'a self) -> Box<dyn 'a + Iterator<Item = (Pos, &Option<Tile>)>> {
-		Box::new(
-			self.tiles
-				.iter()
-				.enumerate()
-				.flat_map(|(y, e)| e.iter().enumerate().map(move |(x, t)| ((x, y), t))),
-		)
+		Box::new(self.tiles.iter().enumerate().flat_map(|(y, e)| {
+			e.iter().enumerate().map(move |(x, t)| (Pos { x: x as u16, y: y as u16 }, t))
+		}))
 	}
 }
 
@@ -324,7 +326,7 @@ impl Default for Board {
 				],
 			],
 			rotated: false,
-			cursor_pos: (4, 0),
+			cursor_pos: Pos { x: 4, y: 0 },
 			cursor_style_alt: false,
 			selected: None,
 			player: White,
@@ -335,14 +337,10 @@ impl Default for Board {
 }
 
 impl Widget for Board {
-	fn size(&self) -> (usize, usize) {
-		(18, 9)
+	fn size(&self) -> Size {
+		Size { width: 18, height: 9 }
 	}
-	fn display_line(
-		&self,
-		f: &mut std::fmt::Formatter<'_>,
-		mut line_nb: usize,
-	) -> std::fmt::Result {
+	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, mut line_nb: u16) -> std::fmt::Result {
 		if line_nb == 8 {
 			f.write_char(' ')?;
 			f.write_char(' ')?;
@@ -361,7 +359,7 @@ impl Widget for Board {
 				// The bord begins at bottom left
 				line_nb = 7 - line_nb;
 			}
-			let line = &self.tiles[line_nb];
+			let line = &self.tiles[line_nb as usize];
 			f.write_str(&(line_nb + 1).to_string())?;
 			f.write_char(' ')?;
 
@@ -370,7 +368,7 @@ impl Widget for Board {
 
 			#[allow(clippy::if_same_then_else)]
 			let write_tile = |(i, tile): (usize, &Option<Tile>)| {
-				let pos = (i, line_nb);
+				let pos = Pos { x: i as u16, y: line_nb };
 				let style = if pos == self.cursor_pos && selected_style.is_some() {
 					selected_style.unwrap()
 				} else if !self.checked_by.is_empty()
@@ -383,7 +381,7 @@ impl Widget for Board {
 					&self.style.selected_style
 				} else if self.invalid.map_or(false, |(p0, p1)| p0 == pos || p1 == pos) {
 					&self.style.invalid_style
-				} else if (line_nb + i) % 2 == 0 {
+				} else if (line_nb as usize + i) % 2 == 0 {
 					&self.style.light_tile_style
 				} else {
 					&self.style.dark_tile_style
@@ -424,7 +422,7 @@ impl EventBubblingWidget for Board {
 		let pos = event.pos();
 		let mut row = pos.line;
 		let mut column = pos.column / 2;
-		if column < 1 || column > 8 || row >= 8 {
+		if !(1..=8).contains(&column) || row >= 8 {
 			return callback(None, event.bubble_at(pos));
 		}
 		if self.rotated {
@@ -433,7 +431,7 @@ impl EventBubblingWidget for Board {
 			column -= 1;
 			row = 7 - row;
 		}
-		let new_pos = (column as usize, row as usize);
+		let new_pos = Pos { x: column, y: row };
 		callback(Some((new_pos, self[new_pos])), event.bubble_at(Position { line: row, column }))
 	}
 }

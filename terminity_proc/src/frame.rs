@@ -208,12 +208,25 @@ impl Parse for FrameMacro {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub struct WidgetLine {
+	pub widget_char: char,
+	pub uid: usize,
+	pub line_index: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct FrameLine {
+	pub prefix: LitStr,
+	pub line_content: Vec<(WidgetLine, LitStr)>,
+}
+
 pub fn parse_frame_lines(
 	frame_width: &mut Option<usize>,
 	errors: &mut Vec<Diagnostic>,
 	content: &[LitStr],
 	widgets_names: Vec<(char, &RefCell<Option<(usize, usize)>>)>,
-) -> Vec<(LitStr, Vec<(((char, usize), usize), LitStr)>)> {
+) -> Vec<FrameLine> {
 	let mut res_lines = vec![];
 
 	let mut next_uid = 0;
@@ -225,24 +238,25 @@ pub fn parse_frame_lines(
 		usize,
 		(&RefCell<Option<(usize, usize)>>, bool),
 	)> = vec![];
+
 	for line in content {
-		let line_content = line.value();
+		let line_content = line.value().chars().collect::<Vec<_>>();
 		// Check full width of frame
 		match frame_width {
 			Some(w) => {
-				if *w != line_content.chars().count() {
+				if *w != line_content.len() {
 					errors.push(Diagnostic::spanned(
 						line.span(),
 						Level::Error,
 						format!(
 							"Frame width is inconsistant. Got {} earlier, found {} here.",
 							w,
-							line_content.chars().count()
+							line_content.len()
 						),
 					));
 				}
 			} // TODO: check width in graphemes
-			None => *frame_width = Some(line_content.chars().count()),
+			None => *frame_width = Some(line_content.len()),
 		}
 		// Get the list of index of widget on current line
 		let mut indexes = widgets_names
@@ -257,14 +271,17 @@ pub fn parse_frame_lines(
 				let mut substr_index = 0;
 
 				// Find next occurence of the char to match
-				while let Some(mut start_index) = substr.find(name) {
+				while let Some(mut start_index) = substr.iter().position(|c| *c == name) {
 					// getting `end_index` relatively to `start_index`
 					let mut end_index = match *widget_size.borrow_mut() {
 						// If current widget has pre-defined width, then use it
 						Some((w, _)) => {
-							let widget_section = &substr[start_index..(start_index + w)];
-							if widget_section.chars().count() != w
-								|| !widget_section.chars().all(|c| c == name)
+							let widget_section = substr
+								.get(start_index..(start_index + w))
+								.or_else(|| substr.get(start_index..))
+								.unwrap_or(&[]);
+							if widget_section.len() != w
+								|| !widget_section.iter().all(|c| *c == name)
 							{
 								// Create error and skip until a char is different
 								errors.push(Diagnostic::spanned(
@@ -276,18 +293,18 @@ pub fn parse_frame_lines(
 								start_index += substr_index;
 								// Prepare next iter
 								substr_index = start_index
-									+ line_content[start_index..]
-										.find(|ch| ch != name)
-										.unwrap_or(line_content.len());
-								substr = &line_content[substr_index..];
+									+ line_content.get(start_index..).map_or(0, |s| {
+										s.iter().position(|ch| *ch != name).unwrap_or(s.len())
+									});
+								substr = line_content.get(substr_index..).unwrap_or(&[]);
 								continue;
 							} else {
 								w
 							}
 						}
-						None => substr[start_index..]
-							.find(|ch| ch != name)
-							.unwrap_or(line_content.len()),
+						None => substr
+							.get(start_index..)
+							.map_or(0, |s| s.iter().position(|ch| *ch != name).unwrap_or(s.len())),
 					};
 					// Relatively to substr
 					end_index += start_index;
@@ -334,7 +351,7 @@ pub fn parse_frame_lines(
 
 					// Prepare next iteration
 					substr_index = end_index;
-					substr = &line_content[substr_index..];
+					substr = line_content.get(substr_index..).unwrap_or(&[]);
 					res.push((
 						name,
 						uid,
@@ -387,15 +404,28 @@ pub fn parse_frame_lines(
 		for (widget, uid, (line_index, line_end), line_height, _) in indexes.iter().rev() {
 			//let width = content_width.unwrap();
 			line_res.push((
-				((*widget, *uid), *line_height),
-				LitStr::new(&line_content[*line_end..last_index], line.span()),
+				WidgetLine { widget_char: *widget, uid: *uid, line_index: *line_height as u16 },
+				LitStr::new(
+					&line_content
+						.get(*line_end..last_index)
+						.unwrap_or(&[])
+						.iter()
+						.collect::<String>(),
+					line.span(),
+				),
 			));
 			last_index = *line_index;
 		}
 		// Reorder line to have it in appropriate order
 		line_res.reverse();
 
-		res_lines.push((LitStr::new(&line_content[0..last_index], line.span()), line_res));
+		res_lines.push(FrameLine {
+			prefix: LitStr::new(
+				&line_content[0..last_index].iter().collect::<String>(),
+				line.span(),
+			),
+			line_content: line_res,
+		});
 
 		// Prepare next iteration
 		last_indexes = indexes;
@@ -482,18 +512,18 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 		&mut frame_width,
 		&mut errors,
 		&input.content,
-		widgets_indexes.keys().map(|k| (*k, &widgets_size)).collect(),
+		widgets_indexes.keys().map(|k| (*k, &widgets_size)).collect::<Vec<_>>(),
 	);
 
 	let mut frame_lines: Punctuated<_, Token![,]> = Punctuated::new();
 
 	let mut uid_indexes: HashMap<usize, Expr> = HashMap::new();
-	for (prefix, line_details) in frame_layout.into_iter() {
-		let line_res = line_details.into_iter().map(|(((name, uid), line_i), suffix)| {
-			let index_expr = match uid_indexes.get(&uid) {
+	for FrameLine { prefix, line_content } in frame_layout.into_iter() {
+		let line_res = line_content.into_iter().map(|(line_details, suffix)| {
+			let index_expr = match uid_indexes.get(&line_details.uid) {
 				Some(i) => i.clone(),
 				None => {
-					let (_, index) = &widgets_indexes[&name];
+					let (_, index) = &widgets_indexes[&line_details.widget_char];
 					match index {
 						IndexKind::Expr(e) => e.clone(),
 						IndexKind::Range((_, end, current)) => {
@@ -516,12 +546,13 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 							}
 							current.set(i + 1);
 							let res: Expr = parse_quote!(#i);
-							let _ = uid_indexes.insert(uid, res.clone());
+							let _ = uid_indexes.insert(line_details.uid, res.clone());
 							res
 						}
 					}
 				}
 			};
+			let line_i = line_details.line_index;
 			quote!(((#index_expr, #line_i), #suffix.to_owned()))
 		});
 		frame_lines.push(quote!((#prefix.to_owned(), vec![#(#line_res),*])));
@@ -543,7 +574,37 @@ pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
 
 #[cfg(test)]
 mod tests {
+	use proc_macro2::Span;
+
 	use super::*;
+
+	#[test]
+	fn frame_layout() {
+		let mut width = None;
+		let mut errors = vec![];
+		let content = [
+			LitStr::new("0 ─────── 1 ──────────── 2 ─────── 3", Span::call_site()),
+			LitStr::new("0 Library 1 Install Game 2 Options 3", Span::call_site()),
+			LitStr::new("0 ─────── 1 ──────────── 2 ─────── 3", Span::call_site()),
+		];
+		let widgets = vec![
+			('0', Default::default()),
+			('1', Default::default()),
+			('2', Default::default()),
+			('3', Default::default()),
+		];
+		let res = parse_frame_lines(
+			&mut width,
+			&mut errors,
+			&content,
+			widgets.iter().map(|(c, cell)| (*c, cell)).collect(),
+		);
+		println!("{width:?}");
+		println!("{errors:?}");
+		println!("{:?}", widgets.into_iter().map(|(c, cell)| (c, cell.take().unwrap())));
+		println!("{res:#?}");
+		panic!();
+	}
 
 	#[test]
 	fn array_frame() {
@@ -609,44 +670,44 @@ mod tests {
 					(
 						"| ".to_owned(),
 						vec![
-							((0, 0usize), " ".to_owned()),
-							((1, 0usize), " |".to_owned())
+							((0, 0u16), " ".to_owned()),
+							((1, 0u16), " |".to_owned())
 						]
 					),
 					(
 						"| ".to_owned(),
 						vec![
-							((0, 1usize), " ".to_owned()),
-							((1, 1usize), " |".to_owned())
+							((0, 1u16), " ".to_owned()),
+							((1, 1u16), " |".to_owned())
 						]
 					),
 					(
 						"| ".to_owned(),
 						vec![
-							((0, 2usize), " ".to_owned()),
-							((1, 2usize), " |".to_owned())
+							((0, 2u16), " ".to_owned()),
+							((1, 2u16), " |".to_owned())
 						]
 					),
 					("*=============*".to_owned(), vec![]),
 					(
 						"| ".to_owned(),
 						vec![
-							((2, 0usize), " ".to_owned()),
-							((3, 0usize), " |".to_owned())
+							((2, 0u16), " ".to_owned()),
+							((3, 0u16), " |".to_owned())
 						]
 					),
 					(
 						"| ".to_owned(),
 						vec![
-							((2, 1usize), " ".to_owned()),
-							((3, 1usize), " |".to_owned())
+							((2, 1u16), " ".to_owned()),
+							((3, 1u16), " |".to_owned())
 						]
 					),
 					(
 						"| ".to_owned(),
 						vec![
-							((2, 2usize), " ".to_owned()),
-							((3, 2usize), " |".to_owned())
+							((2, 2u16), " ".to_owned()),
+							((3, 2u16), " |".to_owned())
 						]
 					),
 					("\\=============/".to_owned(), vec![])
