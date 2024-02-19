@@ -8,7 +8,7 @@ use terminity::{
 };
 
 use crate::interface::{
-	game_repository::GameDataLatest, hub_games::HubGames, load_game, Context, GameStatus,
+	del_game, game_repository::GameDataLatest, hub_games::HubGames, load_game, Context, GameStatus,
 };
 
 #[derive(Debug)]
@@ -94,8 +94,16 @@ impl LibraryTab {
 					KeyCode::Down => self.selected = self.selected.saturating_add(1),
 					KeyCode::PageUp => self.selected = self.selected.saturating_sub(30),
 					KeyCode::PageDown => self.selected = self.selected.saturating_add(30),
-					KeyCode::Delete => {
-						ctx.games.remove(self.selected);
+					KeyCode::Delete | KeyCode::Backspace => {
+						if let Some(game) = ctx
+							.games
+							.list
+							.get(self.selected)
+							.copied()
+							.and_then(|g| ctx.games.remove(g))
+						{
+							del_game(&ctx.root_path, &game.0.subpath);
+						}
 					}
 					KeyCode::Enter => {
 						if let Some(game) = ctx

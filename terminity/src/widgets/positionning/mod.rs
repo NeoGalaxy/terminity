@@ -1,9 +1,6 @@
 pub mod div;
 
-use std::{
-	fmt::Write,
-	ops::{Deref, DerefMut},
-};
+use std::fmt::Write;
 
 use crate::Size;
 

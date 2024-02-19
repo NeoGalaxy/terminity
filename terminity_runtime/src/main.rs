@@ -15,7 +15,7 @@ use crossterm::{
 use game_handling::GameCommands;
 use terminity::{
 	events::{Event, EventPoller},
-	game::{Game, WidgetDisplayer},
+	game::WidgetDisplayer,
 	LineDisp, Size,
 };
 use tokio::time::sleep;
@@ -132,7 +132,7 @@ async fn main() -> anyhow::Result<()> {
 
 	println!("games: {games:#?}");
 
-	let mut start_screen = Hub::start(games, size);
+	let mut hub = Hub::start(games, size).await;
 
 	crossterm::terminal::enable_raw_mode()?;
 	stdout()
@@ -155,10 +155,10 @@ async fn main() -> anyhow::Result<()> {
 	let mut close = false;
 	while !close {
 		let poller = NativePoller::new();
-		start_screen.update(&poller).await;
+		hub.update(&poller).await;
 		close = poller.cmds.borrow().close;
 
-		start_screen.disp(NativeDisplayer);
+		hub.disp(NativeDisplayer);
 
 		sleep(Duration::from_millis(50)).await;
 	}
@@ -179,7 +179,7 @@ async fn main() -> anyhow::Result<()> {
 	crossterm::terminal::disable_raw_mode()?;
 	println!("Terminal restored.");
 	println!("Closing Terminity...");
-	let data = start_screen.finish();
+	let data = hub.finish();
 	println!("Saving remaining data...");
 	fs::create_dir_all(tty_config.parent().unwrap()).unwrap();
 	println!("Data: {data:#?}");

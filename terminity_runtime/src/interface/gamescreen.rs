@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use crate::game_handling::{GameCommands, GameHandle, GameLib};
 use ouroboros::self_referencing;
@@ -6,10 +6,7 @@ use terminity::{
 	events::Event,
 	img,
 	widgets::{
-		positionning::{
-			div::{Div1, Div3},
-			Clip, Position, Spacing,
-		},
+		positionning::{div::Div3, Clip, Position, Spacing},
 		WidgetString,
 	},
 	wstr,
@@ -66,7 +63,7 @@ impl GameScreen {
 
 	pub(crate) fn update<P: terminity::events::EventPoller>(&mut self, poller: P) -> GameCommands {
 		for e in poller.events() {
-			self.with_events_mut(|events| events.try_send(e));
+			let _ = self.with_events_mut(|events| events.try_send(e));
 		}
 		self.with_game_mut(|g| g.tick())
 	}

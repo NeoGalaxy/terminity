@@ -1,7 +1,7 @@
 use std::{
 	cell::RefCell,
 	collections::HashMap,
-	fs, mem,
+	mem,
 	path::{Path, PathBuf},
 	sync::Arc,
 };
@@ -9,10 +9,11 @@ use std::{
 use rand::distributions::{Distribution, Standard};
 use terminity::{
 	events::{CommandEvent, Event, EventPoller, KeyCode, KeyModifiers, KeyPress},
-	game::{Game, WidgetDisplayer},
+	game::WidgetDisplayer,
 	Size,
 };
 use tokio::{
+	fs, io,
 	sync::mpsc::{self, Receiver, Sender, UnboundedReceiver, UnboundedSender},
 	task::JoinHandle,
 };
@@ -203,8 +204,13 @@ pub fn load_game(
 	tokio::spawn(async move { unsafe { GameLib::new(path) } })
 }
 
+pub fn del_game(parent_path: &Path, subpath: &Path) -> JoinHandle<io::Result<()>> {
+	let path = parent_path.join(subpath);
+	tokio::spawn(fs::remove_file(path))
+}
+
 impl Hub {
-	pub fn start(data: Option<GameRepo>, size: Size) -> Self {
+	pub async fn start(data: Option<GameRepo>, size: Size) -> Self {
 		let (root_path, games) = if let Some(data) = data {
 			let GameRepoLatest { root_path, games: games_repo } = data.open();
 			let mut games = HubGames::new();
@@ -222,7 +228,7 @@ impl Hub {
 			} else {
 				PathBuf::from(".terminty/games")
 			};
-			let _ = fs::create_dir_all(&root);
+			let _ = fs::create_dir_all(&root).await;
 			let root = root.canonicalize().unwrap_or(root);
 			(root, Default::default())
 		};

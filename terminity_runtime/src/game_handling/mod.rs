@@ -1,14 +1,7 @@
 use crate::events;
 use crossterm::QueueableCommand as _;
 use libloading::{Library, Symbol};
-use std::{
-	convert::AsRef,
-	ffi::OsStr,
-	io::Write as _,
-	mem::{forget, size_of},
-	ptr::null_mut,
-	slice,
-};
+use std::{convert::AsRef, ffi::OsStr, io::Write as _, mem::size_of, ptr::null_mut, slice};
 use terminity::{
 	events::{CommandEvent, Event, KeyCode, KeyModifiers, KeyPress, TerminityCommandsData},
 	game::GameData,
@@ -16,8 +9,6 @@ use terminity::{
 	Size, WidgetBuffer, WidgetDisplay,
 };
 
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Receiver;
 use tokio::time::sleep;
 use tokio::time::Duration;
 
