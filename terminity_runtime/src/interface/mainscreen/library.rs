@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use terminity::{
 	events::KeyCode,
 	widgets::{
@@ -8,9 +6,10 @@ use terminity::{
 	},
 	Size,
 };
-use tokio::sync::mpsc::Sender;
 
-use crate::{game_handling::GameLib, interface::GameData};
+use crate::interface::{
+	game_repository::GameDataLatest, hub_games::HubGames, load_game, Context, GameStatus,
+};
 
 #[derive(Debug)]
 pub struct LibraryTab {
@@ -20,31 +19,41 @@ pub struct LibraryTab {
 }
 
 #[derive(Debug)]
-pub struct GameEntry<'a>(&'a GameData, bool, u8);
+pub struct GameEntry<'a>(Option<&'a (GameDataLatest, GameStatus)>, bool, u8);
 
 impl Widget for GameEntry<'_> {
 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, _: u16) -> std::fmt::Result {
-		let GameData { uid, name, .. } = self.0;
-		write!(
-			f,
-			" {} {name:.<100} (id: {uid:.>8})",
-			if self.1 {
-				match (self.2 / 2) % 5 {
-					0 => " *-",
-					1 => "*- ",
-					2 => ".--",
-					3 => "-.-",
-					4 => "  *",
-					_ => unreachable!(),
+		if let Some((GameDataLatest { subpath }, status)) = self.0 {
+			let status = match status {
+				GameStatus::Unloaded => "unloaded  ",
+				GameStatus::Loading(_) => "loading...",
+				GameStatus::Loaded(_) => "ready     ",
+				GameStatus::Running(_) => "running...",
+			};
+			let subpath = subpath.display();
+			write!(
+				f,
+				" {} {subpath:.<100} {status}",
+				if self.1 {
+					match (self.2 / 2) % 5 {
+						0 => " *-",
+						1 => "*- ",
+						2 => ".--",
+						3 => "-.-",
+						4 => "  *",
+						_ => unreachable!(),
+					}
+				} else {
+					"   "
 				}
-			} else {
-				"   "
-			}
-		)
+			)
+		} else {
+			Spacing::line(self.size().width).with_char('-').display_line(f, 0)
+		}
 	}
 
 	fn size(&self) -> Size {
-		Size { width: (5 + self.0.name.len().max(100) + 6 + 8 + 1) as u16, height: 1 }
+		Size { width: 5 + 100 + 1 + 10, height: 1 }
 	}
 }
 
@@ -54,10 +63,11 @@ impl LibraryTab {
 		&self,
 		f: &mut std::fmt::Formatter<'_>,
 		line: u16,
-		games: &[GameData],
+		games: &HubGames,
 	) -> std::result::Result<(), std::fmt::Error> {
-		if let Some(game) = games.get(line as usize) {
-			let selected = line as usize == self.selected;
+		let selected = line as usize == self.selected;
+		if let Some(&game_id) = games.list.get(line as usize) {
+			let game = games.get(game_id);
 			Div1::new(true, GameEntry(game, selected, self.tick))
 				.with_forced_size(Size { width: self.size.width, height: 1 })
 				.with_content_pos(Position::Center)
@@ -74,8 +84,7 @@ impl LibraryTab {
 	pub(crate) fn update<P: terminity::events::EventPoller>(
 		&mut self,
 		poller: P,
-		games: &mut Vec<GameData>,
-		run_game: &mut Sender<Arc<GameLib>>,
+		ctx: &mut Context,
 	) {
 		self.tick = self.tick.wrapping_add(1);
 		for e in poller.events() {
@@ -86,18 +95,38 @@ impl LibraryTab {
 					KeyCode::PageUp => self.selected = self.selected.saturating_sub(30),
 					KeyCode::PageDown => self.selected = self.selected.saturating_add(30),
 					KeyCode::Delete => {
-						games.remove(self.selected);
+						ctx.games.remove(self.selected);
 					}
 					KeyCode::Enter => {
-						run_game.try_send(games[self.selected].lib.clone());
+						if let Some(game) = ctx
+							.games
+							.list
+							.get(self.selected)
+							.copied()
+							.and_then(|g| ctx.games.get_mut(g))
+						{
+							match &game.1 {
+								crate::interface::GameStatus::Loaded(lib) => {
+									let _ = ctx.run_game.0.try_send(lib.clone());
+								}
+								GameStatus::Unloaded => {
+									game.1 = GameStatus::Loading(load_game(
+										&ctx.root_path,
+										&game.0.subpath,
+									))
+								}
+								_ => (),
+							}
+						}
 					}
 					_ => (),
 				}
 			}
 		}
 
-		if !games.is_empty() && self.selected >= games.len() {
-			self.selected = games.len() - 1;
+		ctx.games.list.append(&mut ctx.games.unlisted);
+		if !ctx.games.list.is_empty() && self.selected >= ctx.games.list.len() {
+			self.selected = ctx.games.list.len() - 1;
 		}
 	}
 }

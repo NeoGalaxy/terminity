@@ -110,6 +110,30 @@ async fn main() -> anyhow::Result<()> {
 		println!("----------------------------------------------");
 		bail!("Couldn't start Terminity");
 	};
+
+	let size = {
+		let tmp = crossterm::terminal::size().unwrap_or((100, 30));
+		Size { width: tmp.0, height: tmp.1 }
+	};
+
+	let games = match File::open(&tty_config) {
+		Ok(v) => match serde_json::from_reader(v) {
+			Ok(v) => Some(v),
+			Err(e) => {
+				println!("Invalid json: {e}");
+				None
+			}
+		},
+		Err(e) => {
+			println!("No conf file: {e}");
+			None
+		}
+	};
+
+	println!("games: {games:#?}");
+
+	let mut start_screen = Hub::start(games, size);
+
 	crossterm::terminal::enable_raw_mode()?;
 	stdout()
 		.queue(crossterm::cursor::SavePosition)?
@@ -128,18 +152,10 @@ async fn main() -> anyhow::Result<()> {
 		PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::all()),
 	)?;
 
-	let size = {
-		let tmp = crossterm::terminal::size().unwrap_or((100, 30));
-		Size { width: tmp.0, height: tmp.1 }
-	};
-
-	let games = File::open(&tty_config).ok().and_then(|f| serde_json::from_reader(f).ok());
-
 	let mut close = false;
-	let mut start_screen = Hub::start(games, size);
 	while !close {
 		let poller = NativePoller::new();
-		start_screen.update(&poller);
+		start_screen.update(&poller).await;
 		close = poller.cmds.borrow().close;
 
 		start_screen.disp(NativeDisplayer);
@@ -166,7 +182,9 @@ async fn main() -> anyhow::Result<()> {
 	let data = start_screen.finish();
 	println!("Saving remaining data...");
 	fs::create_dir_all(tty_config.parent().unwrap()).unwrap();
+	println!("Data: {data:#?}");
 	serde_json::to_writer(File::create(&tty_config).unwrap(), &data).unwrap();
+	println!("Data: {}", fs::read_to_string(tty_config).unwrap());
 	println!("Saved.");
 	Ok(())
 }
