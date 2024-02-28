@@ -69,7 +69,7 @@ impl LibraryTab {
 		if let Some(&game_id) = games.list.get(line as usize) {
 			let game = games.get(game_id);
 			Div1::new(true, GameEntry(game, selected, self.tick))
-				.with_forced_size(Size { width: self.size.width, height: 1 })
+				.with_exact_size(Size { width: self.size.width, height: 1 })
 				.with_content_pos(Position::Center)
 				.display_line(f, 0)
 		} else {

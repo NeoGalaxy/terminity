@@ -474,103 +474,103 @@ pub fn parse_frame_lines(
 	res_lines
 }
 
-pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
-	let mut errors = vec![];
-	//let mut content_width = None;
-	//let mut content_height = None;
+// pub fn run(input: FrameMacro) -> (TokenStream, Vec<Diagnostic>) {
+// 	let mut errors = vec![];
+// 	//let mut content_width = None;
+// 	//let mut content_height = None;
 
-	let widgets_size = RefCell::new(match input.collection {
-		FrameColl::Array { .. } => None,
-		FrameColl::External { size, .. } => size,
-	});
+// 	let widgets_size = RefCell::new(match input.collection {
+// 		FrameColl::Array { .. } => None,
+// 		FrameColl::External { size, .. } => size,
+// 	});
 
-	let widgets = match &input.collection {
-		FrameColl::Array { values, .. } => {
-			let mut res = Punctuated::new();
-			for pair in values.pairs() {
-				let (wi, punct) = match pair {
-					Pair::Punctuated(w, p) => (w, Some(p)),
-					Pair::End(w) => (w, None),
-				};
-				res.push_value(&wi.expr);
-				if let Some(p) = punct {
-					res.push_punct(p)
-				}
-			}
-			quote!([#res])
-		}
-		FrameColl::External { value, .. } => {
-			quote!(#value)
-		}
-	};
+// 	let widgets = match &input.collection {
+// 		FrameColl::Array { values, .. } => {
+// 			let mut res = Punctuated::new();
+// 			for pair in values.pairs() {
+// 				let (wi, punct) = match pair {
+// 					Pair::Punctuated(w, p) => (w, Some(p)),
+// 					Pair::End(w) => (w, None),
+// 				};
+// 				res.push_value(&wi.expr);
+// 				if let Some(p) = punct {
+// 					res.push_punct(p)
+// 				}
+// 			}
+// 			quote!([#res])
+// 		}
+// 		FrameColl::External { value, .. } => {
+// 			quote!(#value)
+// 		}
+// 	};
 
-	let widgets_indexes: HashMap<_, _> =
-		input.collection.widgets_names().map(|wi_data| (wi_data.0.value(), wi_data)).collect();
+// 	let widgets_indexes: HashMap<_, _> =
+// 		input.collection.widgets_names().map(|wi_data| (wi_data.0.value(), wi_data)).collect();
 
-	let mut frame_width = None;
-	let frame_layout = parse_frame_lines(
-		&mut frame_width,
-		&mut errors,
-		&input.content,
-		widgets_indexes.keys().map(|k| (*k, &widgets_size)).collect::<Vec<_>>(),
-	);
+// 	let mut frame_width = None;
+// 	let frame_layout = parse_frame_lines(
+// 		&mut frame_width,
+// 		&mut errors,
+// 		&input.content,
+// 		widgets_indexes.keys().map(|k| (*k, &widgets_size)).collect::<Vec<_>>(),
+// 	);
 
-	let mut frame_lines: Punctuated<_, Token![,]> = Punctuated::new();
+// 	let mut frame_lines: Punctuated<_, Token![,]> = Punctuated::new();
 
-	let mut uid_indexes: HashMap<usize, Expr> = HashMap::new();
-	for FrameLine { prefix, line_content } in frame_layout.into_iter() {
-		let line_res = line_content.into_iter().map(|(line_details, suffix)| {
-			let index_expr = match uid_indexes.get(&line_details.uid) {
-				Some(i) => i.clone(),
-				None => {
-					let (_, index) = &widgets_indexes[&line_details.widget_char];
-					match index {
-						IndexKind::Expr(e) => e.clone(),
-						IndexKind::Range((_, end, current)) => {
-							let i = current.get();
-							if let Some(end) = end {
-								let end_val = end.base10_parse().expect("TODO: better error");
-								if i == end_val {
-									let d = Diagnostic::spanned(
-										end.span(),
-										Level::Error,
-										format!("Upper bound of {:?} repetition exceeded", end_val),
-									);
-									errors.push(d);
-									//d.emit();
-									/*emit_error!(
-										end.span(),
-										"Upper bound on the number of repetition exceeded"
-									);*/
-								}
-							}
-							current.set(i + 1);
-							let res: Expr = parse_quote!(#i);
-							let _ = uid_indexes.insert(line_details.uid, res.clone());
-							res
-						}
-					}
-				}
-			};
-			let line_i = line_details.line_index;
-			quote!(((#index_expr, #line_i), #suffix.to_owned()))
-		});
-		frame_lines.push(quote!((#prefix.to_owned(), vec![#(#line_res),*])));
-	}
+// 	let mut uid_indexes: HashMap<usize, Expr> = HashMap::new();
+// 	for FrameLine { prefix, line_content } in frame_layout.into_iter() {
+// 		let line_res = line_content.into_iter().map(|(line_details, suffix)| {
+// 			let index_expr = match uid_indexes.get(&line_details.uid) {
+// 				Some(i) => i.clone(),
+// 				None => {
+// 					let (_, index) = &widgets_indexes[&line_details.widget_char];
+// 					match index {
+// 						IndexKind::Expr(e) => e.clone(),
+// 						IndexKind::Range((_, end, current)) => {
+// 							let i = current.get();
+// 							if let Some(end) = end {
+// 								let end_val = end.base10_parse().expect("TODO: better error");
+// 								if i == end_val {
+// 									let d = Diagnostic::spanned(
+// 										end.span(),
+// 										Level::Error,
+// 										format!("Upper bound of {:?} repetition exceeded", end_val),
+// 									);
+// 									errors.push(d);
+// 									//d.emit();
+// 									/*emit_error!(
+// 										end.span(),
+// 										"Upper bound on the number of repetition exceeded"
+// 									);*/
+// 								}
+// 							}
+// 							current.set(i + 1);
+// 							let res: Expr = parse_quote!(#i);
+// 							let _ = uid_indexes.insert(line_details.uid, res.clone());
+// 							res
+// 						}
+// 					}
+// 				}
+// 			};
+// 			let line_i = line_details.line_index;
+// 			quote!(((#index_expr, #line_i), #suffix.to_owned()))
+// 		});
+// 		frame_lines.push(quote!((#prefix.to_owned(), vec![#(#line_res),*])));
+// 	}
 
-	// Check number of repetition of Repeat indexes
-	errors.append(&mut input.collection.check_repeat());
+// 	// Check number of repetition of Repeat indexes
+// 	errors.append(&mut input.collection.check_repeat());
 
-	(
-		quote!({
-			let widgets = #widgets;
-			terminity::widgets::frame::Frame::new(
-				  vec![#frame_lines], widgets
-			)
-		}),
-		errors,
-	)
-}
+// 	(
+// 		quote!({
+// 			let widgets = #widgets;
+// 			terminity::widgets::frame::Frame::new(
+// 				  vec![#frame_lines], widgets
+// 			)
+// 		}),
+// 		errors,
+// 	)
+// }
 
 #[cfg(test)]
 mod tests {
@@ -606,412 +606,412 @@ mod tests {
 		panic!();
 	}
 
-	#[test]
-	fn array_frame() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			['H': img1, 'W': img2]
-			r"/===================\"
-			r"| * HHHHHH WWWWWW * |"
-			r"| * HHHHHH WWWWWW * |"
-			r"\===================/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		#[rustfmt::skip]
-		let expected: proc_macro2::TokenStream = quote!({
-			let widgets = [img1, img2];
-			terminity::widgets::frame::Frame::new(
-				vec![
-					("/===================\\".to_owned(), vec![]),
-					(
-						"| * ".to_owned(),
-						vec![
-							((0usize, 0usize), " ".to_owned()),
-							((1usize, 0usize), " * |".to_owned())
-						]
-					),
-					(
-						"| * ".to_owned(),
-						vec![
-							((0usize, 1usize), " ".to_owned()),
-							((1usize, 1usize), " * |".to_owned())
-						]
-					),
-					("\\===================/".to_owned(), vec![])
-				],
-				widgets
-			)
-		});
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 0);
-		assert_eq!(res.0.to_string(), expected.to_string());
-	}
+	// #[test]
+	// fn array_frame() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		['H': img1, 'W': img2]
+	// 		r"/===================\"
+	// 		r"| * HHHHHH WWWWWW * |"
+	// 		r"| * HHHHHH WWWWWW * |"
+	// 		r"\===================/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	#[rustfmt::skip]
+	// 	let expected: proc_macro2::TokenStream = quote!({
+	// 		let widgets = [img1, img2];
+	// 		terminity::widgets::frame::Frame::new(
+	// 			vec![
+	// 				("/===================\\".to_owned(), vec![]),
+	// 				(
+	// 					"| * ".to_owned(),
+	// 					vec![
+	// 						((0usize, 0usize), " ".to_owned()),
+	// 						((1usize, 0usize), " * |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| * ".to_owned(),
+	// 					vec![
+	// 						((0usize, 1usize), " ".to_owned()),
+	// 						((1usize, 1usize), " * |".to_owned())
+	// 					]
+	// 				),
+	// 				("\\===================/".to_owned(), vec![])
+	// 			],
+	// 			widgets
+	// 		)
+	// 	});
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 0);
+	// 	assert_eq!(res.0.to_string(), expected.to_string());
+	// }
 
-	#[test]
-	fn coll_frame() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values => {'a': 0, 'b': 1, 'c': 2, 'd': 3}
-			r"/=============\"
-			r"| aaaaa bbbbb |"
-			r"| aaaaa bbbbb |"
-			r"| aaaaa bbbbb |"
-			r"*=============*"
-			r"| ccccc ddddd |"
-			r"| ccccc ddddd |"
-			r"| ccccc ddddd |"
-			r"\=============/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		#[rustfmt::skip]
-		let expected: proc_macro2::TokenStream = quote!({
-			let widgets = values;
-			terminity::widgets::frame::Frame::new(
-				vec![
-					("/=============\\".to_owned(), vec![]),
-					(
-						"| ".to_owned(),
-						vec![
-							((0, 0u16), " ".to_owned()),
-							((1, 0u16), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((0, 1u16), " ".to_owned()),
-							((1, 1u16), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((0, 2u16), " ".to_owned()),
-							((1, 2u16), " |".to_owned())
-						]
-					),
-					("*=============*".to_owned(), vec![]),
-					(
-						"| ".to_owned(),
-						vec![
-							((2, 0u16), " ".to_owned()),
-							((3, 0u16), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((2, 1u16), " ".to_owned()),
-							((3, 1u16), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((2, 2u16), " ".to_owned()),
-							((3, 2u16), " |".to_owned())
-						]
-					),
-					("\\=============/".to_owned(), vec![])
-				],
-				widgets
-			)
-		});
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 0);
-		assert_eq!(res.0.to_string(), expected.to_string());
-	}
+	// #[test]
+	// fn coll_frame() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values => {'a': 0, 'b': 1, 'c': 2, 'd': 3}
+	// 		r"/=============\"
+	// 		r"| aaaaa bbbbb |"
+	// 		r"| aaaaa bbbbb |"
+	// 		r"| aaaaa bbbbb |"
+	// 		r"*=============*"
+	// 		r"| ccccc ddddd |"
+	// 		r"| ccccc ddddd |"
+	// 		r"| ccccc ddddd |"
+	// 		r"\=============/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	#[rustfmt::skip]
+	// 	let expected: proc_macro2::TokenStream = quote!({
+	// 		let widgets = values;
+	// 		terminity::widgets::frame::Frame::new(
+	// 			vec![
+	// 				("/=============\\".to_owned(), vec![]),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0, 0u16), " ".to_owned()),
+	// 						((1, 0u16), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0, 1u16), " ".to_owned()),
+	// 						((1, 1u16), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0, 2u16), " ".to_owned()),
+	// 						((1, 2u16), " |".to_owned())
+	// 					]
+	// 				),
+	// 				("*=============*".to_owned(), vec![]),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2, 0u16), " ".to_owned()),
+	// 						((3, 0u16), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2, 1u16), " ".to_owned()),
+	// 						((3, 1u16), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2, 2u16), " ".to_owned()),
+	// 						((3, 2u16), " |".to_owned())
+	// 					]
+	// 				),
+	// 				("\\=============/".to_owned(), vec![])
+	// 			],
+	// 			widgets
+	// 		)
+	// 	});
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 0);
+	// 	assert_eq!(res.0.to_string(), expected.to_string());
+	// }
 
-	#[test]
-	fn repeat_one_frame() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values => {repeat 'a': 0..4}
-			r"/=============\"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"*=============*"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"\=============/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		#[rustfmt::skip]
-		let expected: proc_macro2::TokenStream = quote!({
-			let widgets = values;
-			terminity::widgets::frame::Frame::new(
-				vec![
-					("/=============\\".to_owned(), vec![]),
-					(
-						"| ".to_owned(),
-						vec![
-							((0usize, 0usize), " ".to_owned()),
-							((1usize, 0usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((0usize, 1usize), " ".to_owned()),
-							((1usize, 1usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((0usize, 2usize), " ".to_owned()),
-							((1usize, 2usize), " |".to_owned())
-						]
-					),
-					("*=============*".to_owned(), vec![]),
-					(
-						"| ".to_owned(),
-						vec![
-							((2usize, 0usize), " ".to_owned()),
-							((3usize, 0usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((2usize, 1usize), " ".to_owned()),
-							((3usize, 1usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((2usize, 2usize), " ".to_owned()),
-							((3usize, 2usize), " |".to_owned())
-						]
-					),
-					("\\=============/".to_owned(), vec![])
-				],
-				widgets
-			)
-		});
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 0);
-		assert_eq!(res.0.to_string(), expected.to_string());
-	}
+	// #[test]
+	// fn repeat_one_frame() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values => {repeat 'a': 0..4}
+	// 		r"/=============\"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"*=============*"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"\=============/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	#[rustfmt::skip]
+	// 	let expected: proc_macro2::TokenStream = quote!({
+	// 		let widgets = values;
+	// 		terminity::widgets::frame::Frame::new(
+	// 			vec![
+	// 				("/=============\\".to_owned(), vec![]),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0usize, 0usize), " ".to_owned()),
+	// 						((1usize, 0usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0usize, 1usize), " ".to_owned()),
+	// 						((1usize, 1usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0usize, 2usize), " ".to_owned()),
+	// 						((1usize, 2usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				("*=============*".to_owned(), vec![]),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2usize, 0usize), " ".to_owned()),
+	// 						((3usize, 0usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2usize, 1usize), " ".to_owned()),
+	// 						((3usize, 1usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2usize, 2usize), " ".to_owned()),
+	// 						((3usize, 2usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				("\\=============/".to_owned(), vec![])
+	// 			],
+	// 			widgets
+	// 		)
+	// 	});
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 0);
+	// 	assert_eq!(res.0.to_string(), expected.to_string());
+	// }
 
-	#[test]
-	fn repeat_one_frame_noend() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values => {repeat 'a': 0..}
-			r"/=============\"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"*=============*"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"\=============/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		#[rustfmt::skip]
-		let expected: proc_macro2::TokenStream = quote!({
-			let widgets = values;
-			terminity::widgets::frame::Frame::new(
-				vec![
-					("/=============\\".to_owned(), vec![]),
-					(
-						"| ".to_owned(),
-						vec![
-							((0usize, 0usize), " ".to_owned()),
-							((1usize, 0usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((0usize, 1usize), " ".to_owned()),
-							((1usize, 1usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((0usize, 2usize), " ".to_owned()),
-							((1usize, 2usize), " |".to_owned())
-						]
-					),
-					("*=============*".to_owned(), vec![]),
-					(
-						"| ".to_owned(),
-						vec![
-							((2usize, 0usize), " ".to_owned()),
-							((3usize, 0usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((2usize, 1usize), " ".to_owned()),
-							((3usize, 1usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((2usize, 2usize), " ".to_owned()),
-							((3usize, 2usize), " |".to_owned())
-						]
-					),
-					("\\=============/".to_owned(), vec![])
-				],
-				widgets
-			)
-		});
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 0);
-		assert_eq!(res.0.to_string(), expected.to_string());
-	}
+	// #[test]
+	// fn repeat_one_frame_noend() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values => {repeat 'a': 0..}
+	// 		r"/=============\"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"*=============*"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"\=============/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	#[rustfmt::skip]
+	// 	let expected: proc_macro2::TokenStream = quote!({
+	// 		let widgets = values;
+	// 		terminity::widgets::frame::Frame::new(
+	// 			vec![
+	// 				("/=============\\".to_owned(), vec![]),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0usize, 0usize), " ".to_owned()),
+	// 						((1usize, 0usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0usize, 1usize), " ".to_owned()),
+	// 						((1usize, 1usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0usize, 2usize), " ".to_owned()),
+	// 						((1usize, 2usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				("*=============*".to_owned(), vec![]),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2usize, 0usize), " ".to_owned()),
+	// 						((3usize, 0usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2usize, 1usize), " ".to_owned()),
+	// 						((3usize, 1usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((2usize, 2usize), " ".to_owned()),
+	// 						((3usize, 2usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				("\\=============/".to_owned(), vec![])
+	// 			],
+	// 			widgets
+	// 		)
+	// 	});
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 0);
+	// 	assert_eq!(res.0.to_string(), expected.to_string());
+	// }
 
-	#[test]
-	fn repeat_not_enough() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values => {repeat 'a': 0..5}
-			r"/=============\"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"*=============*"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"\=============/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 1);
-	}
+	// #[test]
+	// fn repeat_not_enough() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values => {repeat 'a': 0..5}
+	// 		r"/=============\"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"*=============*"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"\=============/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 1);
+	// }
 
-	#[test]
-	fn repeat_too_much() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values => {repeat 'a': 0..3}
-			r"/=============\"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"*=============*"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"| aaaaa aaaaa |"
-			r"\=============/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 1);
-	}
+	// #[test]
+	// fn repeat_too_much() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values => {repeat 'a': 0..3}
+	// 		r"/=============\"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"*=============*"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"| aaaaa aaaaa |"
+	// 		r"\=============/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 1);
+	// }
 
-	#[test]
-	fn wrong_width() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values of size<3, 2> => {repeat 'a': 0..}
-			r"/======\"
-			r"| aaaa |"
-			r"| aaaa |"
-			r"\======/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		println!("{:?}", res.1);
-		assert_ne!(res.1.len(), 0);
-	}
+	// #[test]
+	// fn wrong_width() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values of size<3, 2> => {repeat 'a': 0..}
+	// 		r"/======\"
+	// 		r"| aaaa |"
+	// 		r"| aaaa |"
+	// 		r"\======/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	println!("{:?}", res.1);
+	// 	assert_ne!(res.1.len(), 0);
+	// }
 
-	#[test]
-	fn wrong_height() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values of size<2, 3> => {repeat 'a': 0..}
-			r"/====\"
-			r"| aa |"
-			r"| aa |"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 1);
-	}
+	// #[test]
+	// fn wrong_height() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values of size<2, 3> => {repeat 'a': 0..}
+	// 		r"/====\"
+	// 		r"| aa |"
+	// 		r"| aa |"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 1);
+	// }
 
-	#[test]
-	fn wrong_height2() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values of size<2, 3> => {repeat 'a': 0..}
-			r"/====\"
-			r"| aa |"
-			r"| aa |"
-			r"\====/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 1);
-	}
+	// #[test]
+	// fn wrong_height2() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values of size<2, 3> => {repeat 'a': 0..}
+	// 		r"/====\"
+	// 		r"| aa |"
+	// 		r"| aa |"
+	// 		r"\====/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 1);
+	// }
 
-	#[test]
-	fn consistant_sizes() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values => {repeat 'a': 0..}
-			r"/=========\"
-			r"| aa  aaa |"
-			r"| aa  aaa |"
-			r"\=========/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 1);
-	}
+	// #[test]
+	// fn consistant_sizes() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values => {repeat 'a': 0..}
+	// 		r"/=========\"
+	// 		r"| aa  aaa |"
+	// 		r"| aa  aaa |"
+	// 		r"\=========/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 1);
+	// }
 
-	#[test]
-	fn repeat_frame() {
-		let frame_def: proc_macro2::TokenStream = quote!(
-			values of size<1, 1> => {repeat 'x': 0..12}
-			r"/======\"
-			r"| xxxx |"
-			r"| xxxx |"
-			r"| xxxx |"
-			r"\======/"
-		);
-		let res = run(syn::parse2(frame_def).unwrap());
-		#[rustfmt::skip]
-		let expected: proc_macro2::TokenStream = quote!({
-			let widgets = values;
-			terminity::widgets::frame::Frame::new(
-				vec![
-					("/======\\".to_owned(), vec![]),
-					(
-						"| ".to_owned(),
-						vec![
-							((0usize, 0usize), "".to_owned()),
-							((1usize, 0usize), "".to_owned()),
-							((2usize, 0usize), "".to_owned()),
-							((3usize, 0usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((4usize, 0usize), "".to_owned()),
-							((5usize, 0usize), "".to_owned()),
-							((6usize, 0usize), "".to_owned()),
-							((7usize, 0usize), " |".to_owned())
-						]
-					),
-					(
-						"| ".to_owned(),
-						vec![
-							((8usize, 0usize), "".to_owned()),
-							((9usize, 0usize), "".to_owned()),
-							((10usize, 0usize), "".to_owned()),
-							((11usize, 0usize), " |".to_owned())
-						]
-					),
-					("\\======/".to_owned(), vec![])
-				],
-				widgets
-			)
-		});
-		println!("{:?}", res.1);
-		assert_eq!(res.1.len(), 0);
-		assert_eq!(res.0.to_string(), expected.to_string());
-	}
+	// #[test]
+	// fn repeat_frame() {
+	// 	let frame_def: proc_macro2::TokenStream = quote!(
+	// 		values of size<1, 1> => {repeat 'x': 0..12}
+	// 		r"/======\"
+	// 		r"| xxxx |"
+	// 		r"| xxxx |"
+	// 		r"| xxxx |"
+	// 		r"\======/"
+	// 	);
+	// 	let res = run(syn::parse2(frame_def).unwrap());
+	// 	#[rustfmt::skip]
+	// 	let expected: proc_macro2::TokenStream = quote!({
+	// 		let widgets = values;
+	// 		terminity::widgets::frame::Frame::new(
+	// 			vec![
+	// 				("/======\\".to_owned(), vec![]),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((0usize, 0usize), "".to_owned()),
+	// 						((1usize, 0usize), "".to_owned()),
+	// 						((2usize, 0usize), "".to_owned()),
+	// 						((3usize, 0usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((4usize, 0usize), "".to_owned()),
+	// 						((5usize, 0usize), "".to_owned()),
+	// 						((6usize, 0usize), "".to_owned()),
+	// 						((7usize, 0usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				(
+	// 					"| ".to_owned(),
+	// 					vec![
+	// 						((8usize, 0usize), "".to_owned()),
+	// 						((9usize, 0usize), "".to_owned()),
+	// 						((10usize, 0usize), "".to_owned()),
+	// 						((11usize, 0usize), " |".to_owned())
+	// 					]
+	// 				),
+	// 				("\\======/".to_owned(), vec![])
+	// 			],
+	// 			widgets
+	// 		)
+	// 	});
+	// 	println!("{:?}", res.1);
+	// 	assert_eq!(res.1.len(), 0);
+	// 	assert_eq!(res.0.to_string(), expected.to_string());
+	// }
 }

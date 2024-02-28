@@ -17,12 +17,7 @@ use terminity::{
 	},
 	Size,
 };
-use tokio::{
-	fs::{self, File},
-	io,
-	sync::Mutex,
-	task::JoinHandle,
-};
+use tokio::{fs::File, io, sync::Mutex, task::JoinHandle};
 
 use crate::interface::{game_repository::GameDataLatest, load_game, Context, GameStatus};
 
@@ -61,7 +56,7 @@ pub struct InstallTab {
 	// content: Div2<Img<'static>, TextArea>,
 	tick: usize,
 	popup: Option<JoinHandle<Vec<FileHandle>>>,
-	copying: CollDiv<Vec<Status>, Status>,
+	copying: Div4<Spacing, Img<'static>, Img<'static>, CollDiv<Vec<Status>, Status>>,
 }
 
 const TITLE1: Img = img![
@@ -76,16 +71,11 @@ impl InstallTab {
 		&self,
 		f: &mut std::fmt::Formatter<'_>,
 		line: u16,
-		size: Size,
 	) -> std::result::Result<(), std::fmt::Error> {
-		Div4::new(false, Spacing::line(size.width).with_char(' '), TITLE1, TITLE2, &self.copying)
-			.with_content_alignment(Position::Start)
-			.with_content_pos(Position::Start)
-			.with_forced_size(size)
-			.display_line(f, line)
+		self.copying.display_line(f, line)
 	}
 
-	pub(crate) fn new() -> Self {
+	pub(crate) fn new(size: Size) -> Self {
 		let last_dir = if let Some(d) = directories::UserDirs::new() {
 			d.home_dir().to_owned()
 		} else {
@@ -100,7 +90,16 @@ impl InstallTab {
 			// 	.with_forced_size(size),
 			tick: 0,
 			popup: None,
-			copying: CollDiv::new(false, vec![]),
+			copying: Div4::new(
+				false,
+				Spacing::line(1).with_char(' '),
+				TITLE1,
+				TITLE2,
+				CollDiv::new(false, vec![]),
+			)
+			.with_content_alignment(Position::Start)
+			.with_content_pos(Position::Start)
+			.with_exact_size(size),
 		}
 	}
 
@@ -159,14 +158,18 @@ impl InstallTab {
 							Ok(GameDataLatest { subpath: full_name })
 						};
 
-						self.copying.collection_mut().push(Status::Running(tokio::spawn(f)));
+						self.copying
+							.widget3_mut()
+							.collection_mut()
+							.push(Status::Running(tokio::spawn(f)));
 					}
 				}
 			}
 		}
 
-		for i in (0..self.copying.len()).rev() {
-			let mut copying = self.copying.collection_mut();
+		for i in (0..self.copying.widget3().len()).rev() {
+			let copying = &mut self.copying.widget3_mut();
+			let mut copying = copying.collection_mut();
 			let game = &mut copying[i];
 			match game {
 				Status::Running(h) => {

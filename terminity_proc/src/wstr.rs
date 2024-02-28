@@ -1,9 +1,7 @@
-use std::mem::size_of;
-
 use proc_macro2::TokenStream;
 use proc_macro_error::{Diagnostic, Level};
 use quote::quote;
-use syn::LitStr;
+use syn::{parse::Parse, punctuated::Punctuated, LitChar, LitStr, Token};
 
 #[derive(Debug)]
 pub struct LineData {
@@ -11,78 +9,133 @@ pub struct LineData {
 	pub width: u16,
 }
 
-pub fn run(input: LitStr) -> (TokenStream, Vec<Diagnostic>) {
-	match build_str(input.value()) {
-		None => (
-			quote! {
-				unsafe{
-					terminity::widgets::WidgetStr::from_raw(&[])
-				}
-			},
-			vec![],
-		),
-		Some((line_data, result, errors)) => (details_to_tokens(line_data, result), errors),
+pub struct WStrMacro(Punctuated<LitStr, Token![,]>);
+
+impl Parse for WStrMacro {
+	fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+		Ok(WStrMacro(Punctuated::parse_terminated(input)?))
 	}
 }
 
-pub fn build_str(input_val: String) -> Option<(Vec<LineData>, String, Vec<Diagnostic>)> {
-	if input_val.is_empty() {
-		return None;
+pub fn wchar(input: LitChar) -> (TokenStream, Vec<Diagnostic>) {
+	let (out, e) = if input.value().is_control() {
+		(
+			char::REPLACEMENT_CHARACTER,
+			vec![Diagnostic::spanned(
+				input.span(),
+				Level::Error,
+				"Control characters are not allowed".into(),
+			)],
+		)
+	} else {
+		(input.value(), vec![])
+	};
+
+	(quote!(unsafe{ terminity::widgets::wchar::WChar::from_char_unchecked(#out) }), e)
+}
+
+pub fn wstr(input: WStrMacro) -> (TokenStream, Vec<Diagnostic>) {
+	if input.0.is_empty() {
+		return (
+			quote!(unsafe { terminity::widget_string::WidgetStr::from_content_unchecked("", &[]) }),
+			vec![Diagnostic::new(
+				Level::Error,
+				"Empty widget strings are not yet allowed.\n\
+				Try instead a widget string with a single empty line: wstr![\"\"]"
+					.to_string(),
+			)],
+		);
 	}
+
+	let mut errors = vec![];
+	let mut content = String::new();
+	let mut lines = Vec::new();
+
+	for line in input.0 {
+		let (w, c, mut errs) = parse_line(&line);
+		errors.append(&mut errs);
+		let pos = content.len() as u16;
+		lines.push(quote!(terminity::widget_string::LineInfo {pos: #pos, width: #w}));
+		content.push_str(&c);
+	}
+
+	(
+		quote!(unsafe{ terminity::widget_string::WidgetStr::from_content_unchecked(
+			#content,
+			&[#(#lines)*]
+		) }),
+		errors,
+	)
+}
+
+pub fn wline(input: LitStr) -> (TokenStream, Vec<Diagnostic>) {
+	let (w, content, errs) = parse_line(&input);
+
+	(
+		quote!(unsafe{ terminity::widget_string::line::WidgetLine::from_parts_unchecked(
+			#content,
+			#w
+		) }),
+		errs,
+	)
+}
+
+pub fn parse_line(input: &LitStr) -> (u16, String, Vec<Diagnostic>) {
+	let input_val = input.value();
 	let mut errors = vec![];
 	let mut result = String::new();
-	let mut line_data = vec![LineData { pos: 0, width: 0 }];
+	let mut width = 0;
 
-	let mut chars = input_val.chars();
-	while let Some(c) = chars.next() {
+	let chars = input_val.chars();
+	let mut newlines = vec![];
+	for c in chars {
 		match c {
 			'\r' => (),
-			'\n' => line_data.push(LineData { pos: result.len() as u16, width: 0 }),
-			'\x1b' => errors.push(Diagnostic::new(
+			'\n' => newlines.push(result.len()),
+			'\x1b' => errors.push(Diagnostic::spanned(
+				input.span(),
 				Level::Error,
-				"ANSI escapes can't be used in WidgetStr literals.".to_owned(),
+				"Escape codes like ANSI escapes ('\\x1b') can't be used in WidgetStr literals."
+					.to_owned(),
 			)),
-			'\\' => match chars.next() {
-				Some('#') => errors.push(Diagnostic::new(
-					Level::Error,
-					"Escapes are not yet supported".to_owned(),
-				)),
-				Some(c) => {
-					result.push('\\');
-					result.push(c);
-					line_data.last_mut().unwrap().width += 2;
-				}
-				None => {
-					result.push(c);
-					line_data.last_mut().unwrap().width += 1;
-				}
-			},
 			c => {
-				result.push(c);
-				line_data.last_mut().unwrap().width += 1;
+				if c.is_control() {
+					errors.push(Diagnostic::spanned(
+						input.span(),
+						Level::Error,
+						format!(
+							"Character {:?} is a control character \
+							(Widget strings don't allow these)",
+							c
+						),
+					))
+				} else {
+					use unicode_width::UnicodeWidthChar;
+					result.push(c);
+					width += c.width().unwrap() as u16;
+				}
 			}
 		}
 	}
-	Some((line_data, result, errors))
-}
+	if !newlines.is_empty() {
+		// Take the indexes in reverse order (to avoid indexes changing)
+		let (segments, prefix) =
+			newlines.iter().rev().fold((vec![], result.as_str()), |(mut segs, remain), idx| {
+				let parts = remain.split_at(*idx);
+				segs.push(parts.1);
+				(segs, parts.0)
+			});
+		let segments: Vec<_> = [prefix].into_iter().chain(segments.into_iter().rev()).collect();
 
-pub fn details_to_tokens(line_data: Vec<LineData>, result: String) -> TokenStream {
-	// write width + content
-	let mut data: Vec<_> =
-		(line_data.len() as u16).to_le_bytes().into_iter().chain(result.into_bytes()).collect();
-
-	// write end pos
-	data.extend((data.len() as u16).to_le_bytes());
-	// write lines details
-	for line in line_data.into_iter().rev() {
-		let pos = (line.pos + size_of::<u16>() as u16).to_le_bytes();
-		let len = line.width.to_le_bytes();
-		data.extend([pos[0], pos[1], len[0], len[1]]);
+		errors.push(Diagnostic::spanned(
+			input.span(),
+			Level::Error,
+			format!(
+				"Newlines controls are not allowed in wstr. \
+				Try instead breaking your string into multiple lines:\n\
+				wstr!{segments:#?}"
+			),
+		));
 	}
-	let res = quote! {
-		unsafe {
-			terminity::widgets::WidgetStr::from_raw(&[#(#data,)*])
-		}
-	};
-	res
+	(width, result, errors)
 }

@@ -96,6 +96,7 @@ impl GameLib {
 	pub unsafe fn start(
 		&self,
 		event_canal: kanal::Receiver<Event>,
+		init_size: Size,
 	) -> Result<GameHandle, libloading::Error> {
 		let handle = GameBinding {
 			start_game: self.game.get(b"start_game\0")?,
@@ -105,13 +106,13 @@ impl GameLib {
 			free_command_buffer: self.game.get(b"free_command_buffer\0")?,
 			free_game_data: self.game.get(b"free_game_data\0")?,
 		};
-		Ok(GameHandle::start(handle, event_canal))
+		Ok(GameHandle::start(handle, event_canal, init_size))
 	}
 }
 
 #[derive(Debug)]
 pub struct GameBinding<'a> {
-	start_game: Symbol<'a, unsafe extern "C" fn(GameData)>,
+	start_game: Symbol<'a, unsafe extern "C" fn(GameData, u16, u16)>,
 	disp_game: Symbol<'a, unsafe extern "C" fn() -> WidgetBuffer>,
 	update_game: Symbol<'a, unsafe extern "C" fn(*const u8, size: u32) -> TerminityCommandsData>,
 	close_game: Symbol<'a, unsafe extern "C" fn() -> GameData>,
@@ -120,8 +121,8 @@ pub struct GameBinding<'a> {
 }
 
 impl GameBinding<'_> {
-	pub fn start_game(&self, data: GameData) {
-		unsafe { (self.start_game)(data) }
+	pub fn start_game(&self, data: GameData, init_size: Size) {
+		unsafe { (self.start_game)(data, init_size.width, init_size.height) }
 	}
 	pub fn disp_game(&self) -> WidgetBuffer {
 		unsafe { (self.disp_game)() }
@@ -148,8 +149,12 @@ pub struct GameHandle<'a> {
 }
 
 impl<'a> GameHandle<'a> {
-	fn start(binding: GameBinding<'a>, event_canal: kanal::Receiver<Event>) -> Self {
-		binding.start_game(GameData { content: null_mut(), size: 0, capacity: 0 });
+	fn start(
+		binding: GameBinding<'a>,
+		event_canal: kanal::Receiver<Event>,
+		init_size: Size,
+	) -> Self {
+		binding.start_game(GameData { content: null_mut(), size: 0, capacity: 0 }, init_size);
 		Self { binding, event_buffer: Vec::with_capacity(128), event_canal }
 	}
 
@@ -202,10 +207,10 @@ struct GameTask {
 	handle: tokio::task::JoinHandle<()>,
 }
 
-fn run_game_task(game: GameLib) -> GameTask {
+fn run_game_task(game: GameLib, init_size: Size) -> GameTask {
 	let handle = tokio::spawn(async move {
 		let (send, rcv) = kanal::bounded(200);
-		let mut game = unsafe { game.start(rcv) }.unwrap();
+		let mut game = unsafe { game.start(rcv, init_size) }.unwrap();
 
 		loop {
 			if let Some(display) = game.display() {

@@ -25,7 +25,7 @@ impl OptionsTab {
 		Div1::new(false, CONTENT)
 			.with_content_alignment(Position::Center)
 			.with_content_pos(Position::Center)
-			.with_forced_size(size)
+			.with_exact_size(size)
 			.display_line(f, line)
 	}
 

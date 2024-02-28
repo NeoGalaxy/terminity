@@ -67,6 +67,11 @@ impl<W: Widget> Widget for Clip<W> {
 	fn size(&self) -> Size {
 		self.size
 	}
+
+	fn resize(&mut self, size: Size) -> Size {
+		self.size = size;
+		size
+	}
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -96,6 +101,11 @@ impl Widget for Spacing {
 
 	fn size(&self) -> Size {
 		self.size
+	}
+
+	fn resize(&mut self, size: Size) -> Size {
+		self.size = size;
+		size
 	}
 }
 

@@ -1,8 +1,14 @@
 use std::collections::VecDeque;
-use std::fmt::{Debug, Display, Write as _};
+use std::fmt::{Debug, Display};
 use terminity::events::Event;
 use terminity::game::WidgetDisplayer;
-use terminity::{build_game, widgets, Size};
+use terminity::widget_string::WidgetString;
+use terminity::widgets::content::TextArea;
+
+use terminity::widgets::positionning::div::Div2;
+use terminity::widgets::positionning::{Clip, Position};
+use terminity::widgets::Widget;
+use terminity::{build_game, img, Size};
 use terminity::{events::EventPoller, game::Game};
 
 struct DebugAsDisplay<T: Debug>(T);
@@ -17,34 +23,60 @@ impl Game for HelloWorld {
 	type DataInput = ();
 	type DataOutput = ();
 
-	fn start(_data: Option<Self::DataInput>, _size: Size) -> Self {
-		HelloWorld { events: VecDeque::with_capacity(40), frame: 0 }
+	fn start(_data: Option<Self::DataInput>, size: Size) -> Self {
+		HelloWorld { events: VecDeque::with_capacity(40), frame: 0, size }
 	}
 
 	fn disp<D: WidgetDisplayer>(&mut self, displayer: D) {
 		self.frame += 1;
-		let mut array: [String; 30] = Default::default();
-		array[0] = "#*#*------------------------".into();
-		array[1] = "".into();
-		array[2] = "         Hello world!".into();
-		array[3] = "".into();
-		array[4] = "#*#*------------------------".into();
-		array[5] = format!("                                 frame: {:?}", self.frame);
 		let mut n = 0;
 		while self.events.front().map_or(false, |v| v.1 > 50) {
 			n += 1;
 			self.events.pop_front().unwrap();
 		}
-		array[6] =
-			format!("                              cleaned: {n}, size: {}", self.events.len());
-		for (i, array_buf) in array.iter_mut().skip(7).enumerate() {
-			let Some((event, nb_iter)) = self.events.get_mut(i) else {
+
+		let top = img!(
+			"#*#*------------------------",
+			"                            ",
+			"        Hello world!        ",
+			"                            ",
+			"#*#*------------------------",
+		);
+		let mut buffer = WidgetString::new();
+		let text_size = self.size - Size { width: 0, height: top.size().height };
+
+		buffer
+			.push_in_line(
+				format!(
+					"   frame: {:?}, w_size: {:?}",
+					self.frame,
+					(text_size.width, text_size.height)
+				)
+				.as_str()
+				.try_into()
+				.unwrap(),
+			)
+			.newline();
+
+		buffer.push_in_line(
+			format!("   cleaned: {n}, buf_size: {}", self.events.len())
+				.as_str()
+				.try_into()
+				.unwrap(),
+		);
+
+		for i in 0..(text_size.height - buffer.height()) {
+			let Some((event, nb_iter)) = self.events.get_mut(i as usize) else {
 				break;
 			};
 			*nb_iter += 1;
-			write!(array_buf, "{:?}", event).unwrap();
+			buffer.newline().push_in_line(format!("{:?}", event).as_str().try_into().unwrap());
 		}
-		displayer.run(&widgets::text::Text::new(array, 30));
+
+		displayer.run(
+			&Div2::new(false, top, TextArea::left(buffer).with_size(text_size))
+				.with_exact_size(self.size),
+		);
 	}
 
 	fn update<E: EventPoller>(&mut self, events: E) {
@@ -59,6 +91,7 @@ impl Game for HelloWorld {
 struct HelloWorld {
 	frame: usize,
 	events: VecDeque<(Event, usize)>,
+	size: Size,
 }
 
 build_game!(HelloWorld);

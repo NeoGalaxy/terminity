@@ -41,18 +41,41 @@ impl<W: Widget> Drop for DivGuard<'_, W> {
 	}
 }
 
+macro_rules! setters_getters {
+	($field_name:ident: $field_ty:ty $(, $($others:tt)*)?) => {
+		setters_getters!{$($($others)*)?}
+
+		concat_idents::concat_idents!(with_name = with_, $field_name {
+			pub fn with_name(mut self, val: $field_ty) -> Self {
+				self.$field_name = val;
+				self
+			}
+		});
+		concat_idents::concat_idents!(set_name = set_, $field_name {
+			pub fn set_name(&mut self, val: $field_ty) {
+				self.$field_name = val;
+			}
+		});
+
+		pub fn $field_name(&self) -> $field_ty {
+			self.$field_name
+		}
+	};
+	() => {}
+}
+
 macro_rules! div {
 	($name:ident $(,($wfield:ident: $wty:ident))* $(,)?) => {
 		#[derive(Debug, Clone, Copy)]
 		pub struct $name<$($wty),*> {
 			$($wfield: $wty,)*
-			pub horizontal: bool,
-			pub content_alignment: Position,
-			pub content_pos: Position,
-			pub min_height: Option<u16>,
-			pub min_width: Option<u16>,
-			pub max_height: Option<u16>,
-			pub max_width: Option<u16>,
+			horizontal: bool,
+			content_alignment: Position,
+			content_pos: Position,
+			min_height: Option<u16>,
+			min_width: Option<u16>,
+			max_height: Option<u16>,
+			max_width: Option<u16>,
 			content_size: Size,
 		}
 		impl<$($wty: crate::widgets::Widget),*> $name<$($wty),*> {
@@ -74,28 +97,6 @@ macro_rules! div {
 				res
 			}
 
-			pub fn with_content_alignment(mut self, val: Position) -> Self {
-				self.content_alignment = val;
-				self
-			}
-			pub fn with_content_pos(mut self, val: Position) -> Self {
-				self.content_pos = val;
-				self
-			}
-			pub fn with_max_size(mut self, val: Size) -> Self {
-				self.max_width = Some(val.width);
-				self.max_height = Some(val.height);
-				self
-			}
-			pub fn with_min_size(mut self, val: Size) -> Self {
-				self.min_width = Some(val.width);
-				self.min_height = Some(val.height);
-				self
-			}
-			pub fn with_forced_size(self, val: Size) -> Self {
-				self.with_min_size(val).with_max_size(val)
-			}
-
 			fn compute_size(&self) -> Size {
 				let mut size = Size { width: 0, height: 0 };
 				$(
@@ -111,13 +112,52 @@ macro_rules! div {
 				size
 			}
 
+			setters_getters!{
+				content_pos: Position,
+				content_alignment: Position,
+				min_height: Option<u16>,
+				min_width: Option<u16>,
+				max_height: Option<u16>,
+				max_width: Option<u16>,
+			}
+
+			pub fn with_max_size(mut self, val: Size) -> Self {
+				self.set_max_size(val);
+				self
+			}
+
+			pub fn with_min_size(mut self, val: Size) -> Self {
+				self.set_min_size(val);
+				self
+			}
+
+			pub fn with_exact_size(mut self, val: Size) -> Self {
+				self.set_exact_size(val);
+				self
+			}
+
+			pub fn set_max_size(&mut self, val: Size) {
+				self.max_width = Some(val.width);
+				self.max_height = Some(val.height);
+			}
+
+			pub fn set_min_size(&mut self, val: Size) {
+				self.min_width = Some(val.width);
+				self.min_height = Some(val.height);
+			}
+
+			pub fn set_exact_size(&mut self, val: Size) {
+				self.set_max_size(val);
+				self.set_min_size(val);
+			}
+
 			$(
 				pub fn $wfield(&self) -> &$wty {
 					&self.$wfield
 				}
 
-				concat_idents::concat_idents!(fn_name = $wfield, _mut {
-					pub fn fn_name(&mut self) -> DivGuard<$wty> {
+				concat_idents::concat_idents!(wfield_mut = $wfield, _mut {
+					pub fn wfield_mut(&mut self) -> DivGuard<$wty> {
 						let old_w_size = self.$wfield.size();
 						DivGuard {
 							widget: &mut self.$wfield,
@@ -210,6 +250,10 @@ macro_rules! div {
 					height,
 				}
 			}
+			fn resize(&mut self, val: Size) -> Size {
+				self.set_exact_size(val);
+				val
+			}
 		}
 	}
 }
@@ -297,6 +341,45 @@ where
 			}
 		}
 		size
+	}
+
+	setters_getters! {
+		content_alignment: Position,
+		content_pos: Position,
+		min_height: Option<u16>,
+		min_width: Option<u16>,
+		max_height: Option<u16>,
+		max_width: Option<u16>,
+	}
+
+	pub fn with_max_size(mut self, val: Size) -> Self {
+		self.set_max_size(val);
+		self
+	}
+
+	pub fn with_min_size(mut self, val: Size) -> Self {
+		self.set_min_size(val);
+		self
+	}
+
+	pub fn with_exact_size(mut self, val: Size) -> Self {
+		self.set_exact_size(val);
+		self
+	}
+
+	pub fn set_max_size(&mut self, val: Size) {
+		self.max_width = Some(val.width);
+		self.max_height = Some(val.height);
+	}
+
+	pub fn set_min_size(&mut self, val: Size) {
+		self.min_width = Some(val.width);
+		self.min_height = Some(val.height);
+	}
+
+	pub fn set_exact_size(&mut self, val: Size) {
+		self.set_max_size(val);
+		self.set_min_size(val);
 	}
 }
 
@@ -391,6 +474,11 @@ where
 		}
 
 		Size { width, height }
+	}
+
+	fn resize(&mut self, val: Size) -> Size {
+		self.set_exact_size(val);
+		val
 	}
 }
 pub struct CollContentGuard<'g, Coll, W>

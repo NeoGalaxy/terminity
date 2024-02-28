@@ -2,7 +2,7 @@ pub mod install;
 pub mod library;
 pub mod options;
 
-use std::{collections::HashMap, fmt::Write};
+use std::fmt::Write;
 
 use terminity::{
 	events::{Event, EventPoller},
@@ -15,12 +15,12 @@ use terminity::{
 		},
 		Widget,
 	},
-	Size, StructFrame,
+	Size,
 };
 
 use self::{install::InstallTab, library::LibraryTab, options::OptionsTab};
 
-use super::{Context, GameData, HubGames, PollerMap};
+use super::{Context, HubGames, PollerMap};
 
 #[derive(Debug)]
 pub enum Side {
@@ -28,7 +28,7 @@ pub enum Side {
 	Right,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Border {
 	state: Option<Side>,
 }
@@ -118,7 +118,7 @@ impl Widget for &TabContentWidget<'_, '_, '_> {
 		match &self.0.active {
 			None => Spacing::line(size.width).display_line(f, 0),
 			Some(ActiveTab::Library) => self.0.library.display_line(f, line, self.2),
-			Some(ActiveTab::Install) => self.0.install.display_line(f, line, size),
+			Some(ActiveTab::Install) => self.0.install.display_line(f, line),
 			Some(ActiveTab::Options) => self.0.options.display_line(f, line, size),
 		}
 	}
@@ -143,57 +143,36 @@ impl Widget for Num {
 	}
 }
 
-#[derive(Debug, StructFrame)]
-#[sf_layout(
+#[derive(Debug, Widget)]
+#[widget_layout(
+	{
+		'0' => .borders[0],
+		'1' => .borders[1],
+		'2' => .borders[2],
+		'3' => .borders[3],
+		'.' => .nb_games,
+	},
 	"0 ─────── 1 ──────────── 2 ─────── 3",
 	"0 Library 1 Install Game 2 Options 3",
 	"0 ─────── 1 ──────────── 2 ─────── 3",
 	"          [nb games: ....]          "
 )]
 struct TabSelect {
-	#[sf_layout(name = '0')]
-	left_border: Border,
-	#[sf_layout(name = '1')]
-	left_center_border: Border,
-	#[sf_layout(name = '2')]
-	right_center_border: Border,
-	#[sf_layout(name = '3')]
-	right_border: Border,
-	#[sf_layout(name = '.')]
+	borders: [Border; 4],
 	nb_games: Num,
 }
 impl TabSelect {
 	fn from_active(active: Option<ActiveTab>, games: &HubGames) -> TabSelect {
-		match active {
-			None => Self {
-				left_border: Border { state: None },
-				left_center_border: Border { state: None },
-				right_center_border: Border { state: None },
-				right_border: Border { state: None },
-				nb_games: Num(games.list.len()),
-			},
-			Some(ActiveTab::Library) => Self {
-				left_border: Border { state: Some(Side::Right) },
-				left_center_border: Border { state: Some(Side::Left) },
-				right_center_border: Border { state: None },
-				right_border: Border { state: None },
-				nb_games: Num(games.list.len()),
-			},
-			Some(ActiveTab::Install) => Self {
-				left_border: Border { state: None },
-				left_center_border: Border { state: Some(Side::Right) },
-				right_center_border: Border { state: Some(Side::Left) },
-				right_border: Border { state: None },
-				nb_games: Num(games.list.len()),
-			},
-			Some(ActiveTab::Options) => Self {
-				left_border: Border { state: None },
-				left_center_border: Border { state: None },
-				right_center_border: Border { state: Some(Side::Right) },
-				right_border: Border { state: Some(Side::Left) },
-				nb_games: Num(games.list.len()),
-			},
-		}
+		let mut res = Self { borders: Default::default(), nb_games: Num(games.list.len()) };
+		let i = match active {
+			None => return res,
+			Some(ActiveTab::Library) => 0,
+			Some(ActiveTab::Install) => 1,
+			Some(ActiveTab::Options) => 2,
+		};
+		res.borders[i].state = Some(Side::Right);
+		res.borders[i + 1].state = Some(Side::Left);
+		res
 	}
 }
 
@@ -212,7 +191,7 @@ impl MainScreen {
 			size,
 			tabs: TabContent {
 				library: LibraryTab::new(size),
-				install: InstallTab::new(),
+				install: InstallTab::new(size),
 				options: OptionsTab::new(),
 				active: None,
 			},
@@ -225,14 +204,14 @@ impl MainScreen {
 				&Div1::new(false, img!("Terminity"))
 					.with_content_alignment(Position::Center)
 					.with_content_pos(Position::Start)
-					.with_forced_size(self.size),
+					.with_exact_size(self.size),
 			)
 		} else if self.tick < 3 {
 			displayer.run(
 				&Div1::new(false, img!("         ", "Terminity"))
 					.with_content_alignment(Position::Center)
 					.with_content_pos(Position::Start)
-					.with_forced_size(self.size),
+					.with_exact_size(self.size),
 			)
 		} else if self.tick < 4 {
 			displayer.run(
@@ -243,7 +222,7 @@ impl MainScreen {
 				)
 				.with_content_alignment(Position::Center)
 				.with_content_pos(Position::Start)
-				.with_forced_size(self.size),
+				.with_exact_size(self.size),
 			)
 		} else if self.tick < 5 {
 			displayer.run(
@@ -254,7 +233,7 @@ impl MainScreen {
 				)
 				.with_content_alignment(Position::Center)
 				.with_content_pos(Position::Start)
-				.with_forced_size(self.size),
+				.with_exact_size(self.size),
 			)
 		} else if self.tick < 14 {
 			displayer.run(

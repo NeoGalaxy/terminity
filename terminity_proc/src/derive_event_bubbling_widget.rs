@@ -19,5 +19,23 @@ use crate::frame::parse_frame_lines;
 use unicode_segmentation::UnicodeSegmentation;
 
 pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
-	todo!()
+	let name = input.ident;
+
+	let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+	let expanded = quote! {
+		impl #impl_generics terminity::widgets::EventBubblingWidget for #name #ty_generics #where_clause {
+
+			type FinalWidgetData<'a> = &'a mut Self;
+			fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>, BubblingEvent) -> R>(
+				&'a mut self,
+				event: BubblingEvent,
+				callback: F,
+			) -> R {
+				callback(self, event)
+			}
+		}
+	};
+
+	(expanded, vec![])
 }

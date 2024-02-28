@@ -38,6 +38,8 @@
 
 pub mod events;
 pub mod game;
+pub mod wchar;
+pub mod widget_string;
 pub mod widgets;
 
 extern crate self as terminity;
@@ -48,12 +50,18 @@ use std::fmt::Display;
 use std::io::Write as _;
 use std::iter::repeat;
 use std::mem::size_of;
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::Sub;
 use std::ptr::null;
 
-pub use terminity_proc::frame;
+// pub use terminity_proc::frame;
 pub use terminity_proc::img;
+pub use terminity_proc::wchar;
+pub use terminity_proc::wline;
 pub use terminity_proc::wstr;
-pub use terminity_proc::StructFrame;
+// pub use terminity_proc::StructFrame;
 pub use terminity_proc::WidgetDisplay;
 use widgets::Widget;
 
@@ -67,10 +75,38 @@ pub mod _reexport {
 	pub use crossterm::terminal::ClearType::UntilNewLine;
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub struct Size {
 	pub width: u16,
 	pub height: u16,
+}
+
+impl Add for Size {
+	type Output = Self;
+	fn add(self, rhs: Self) -> Self::Output {
+		Self { width: self.width + rhs.width, height: self.height + rhs.height }
+	}
+}
+
+impl Sub for Size {
+	type Output = Self;
+	fn sub(self, rhs: Self) -> Self::Output {
+		Self { width: self.width - rhs.width, height: self.height - rhs.height }
+	}
+}
+
+impl Mul<u16> for Size {
+	type Output = Self;
+	fn mul(self, rhs: u16) -> Self::Output {
+		Self { width: self.width * rhs, height: self.height * rhs }
+	}
+}
+
+impl Div<u16> for Size {
+	type Output = Self;
+	fn div(self, rhs: u16) -> Self::Output {
+		Self { width: self.width / rhs, height: self.height / rhs }
+	}
 }
 
 #[derive(Debug)]
@@ -96,6 +132,7 @@ impl WidgetBuffer {
 	pub fn new_empty() -> Self {
 		Self { width: 0, height: 0, content: null() }
 	}
+
 	pub unsafe fn new<W: Widget>(widget: &W, buffer: &mut Vec<u8>) -> Self {
 		let Size { width, height } = widgets::Widget::size(widget);
 		let (width, height) = (width as usize, height as usize);
@@ -125,6 +162,7 @@ impl WidgetBuffer {
 
 		Self { width: width as u32, height: height as u32, content: buffer.as_ptr() }
 	}
+
 	pub fn is_empty(&self) -> bool {
 		self.content.is_null()
 	}

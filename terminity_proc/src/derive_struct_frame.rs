@@ -1,6 +1,5 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use convert_case::{Case, Casing};
 use darling::FromMeta;
 use proc_macro2::{Span, TokenStream};
 use proc_macro_error::{Diagnostic, Level};
@@ -11,13 +10,54 @@ use syn::{
 	parse::{Parse, ParseStream},
 	parse2,
 	punctuated::Punctuated,
-	spanned::Spanned,
-	token, DeriveInput, Ident, LitChar, LitStr, Member, Token,
+	token, DeriveInput, Lit, LitChar, LitStr, Member, Token,
 };
 
 use crate::frame::{parse_frame_lines, FrameLine, WidgetLine};
 
+enum Content {
+	Bracked(Lit),
+	Dot(Member),
+}
+
+impl Parse for Content {
+	fn parse(input: ParseStream) -> syn::Result<Self> {
+		if input.peek(Token![.]) {
+			input.parse::<Token![.]>()?;
+			Ok(Self::Dot(input.parse()?))
+		} else {
+			let content;
+			bracketed!(content in input);
+			Ok(Self::Bracked(content.parse()?))
+		}
+	}
+}
+
+struct ContentMap {
+	c: LitChar,
+	_arrow: Token![=>],
+	index: Vec<Content>,
+}
+
+impl Parse for ContentMap {
+	fn parse(input: ParseStream) -> syn::Result<Self> {
+		Ok(Self {
+			c: input.parse()?,
+			_arrow: input.parse()?,
+			index: {
+				let mut res = vec![];
+				while !input.peek(Token![,]) {
+					res.push(input.parse()?);
+				}
+				res
+			},
+		})
+	}
+}
+
 struct LayoutArgs {
+	indices: Punctuated<ContentMap, Token![,]>,
+	_comma: Token![,],
 	args: Punctuated<LitStr, Token![,]>,
 }
 
@@ -31,7 +71,13 @@ impl Parse for LayoutArgs {
 		} else {
 			braced!(content in input);
 		}
-		Ok(LayoutArgs { args: content.parse_terminated(<LitStr as Parse>::parse)? })
+		let indices_content;
+		braced!(indices_content in content);
+		Ok(LayoutArgs {
+			indices: indices_content.parse_terminated(<ContentMap as Parse>::parse)?,
+			_comma: content.parse()?,
+			args: content.parse_terminated(<LitStr as Parse>::parse)?,
+		})
 	}
 }
 
@@ -61,22 +107,22 @@ struct AttributeLayoutArgs {
 }
 
 #[derive(Debug)]
-struct FieldDetails<FieldWidget: Fn(TokenStream, bool) -> TokenStream> {
-	field_widget: FieldWidget, // It's this way because of `use_parent`
-	enum_variant: Option<Ident>,
-	field_ty: syn::Type,
-	field_widget_ty: TokenStream, // Exists because it was needed by `use_parent`
+struct FieldDetails<FieldWidget> {
+	access_field: FieldWidget, // It's this way because of `use_parent`
+	// enum_variant: Option<Ident>,
+	// field_ty: syn::Type,
+	// field_widget_ty: TokenStream, // Exists because it was needed by `use_parent`
 	size: RefCell<Option<(usize, usize)>>,
 }
 
 pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 	let mut errors = vec![];
-	let DeriveInput { attrs, ident, generics, data, .. } = input;
+	let DeriveInput { attrs, ident, generics, .. } = input;
 	let (layout, non_layout): (Vec<_>, Vec<_>) =
-		attrs.into_iter().partition(|a| a.path.is_ident("sf_layout"));
+		attrs.into_iter().partition(|a| a.path.is_ident("widget_layout"));
 
 	let (impls, _othet_attrs): (Vec<_>, Vec<_>) =
-		non_layout.into_iter().partition(|a| a.path.is_ident("sf_impl"));
+		non_layout.into_iter().partition(|a| a.path.is_ident("widget_impl"));
 
 	let (all_impls, layout_content) = if layout.len() != 1 || impls.len() > 1 {
 		if layout.len() != 1 {
@@ -84,7 +130,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				Span::call_site(),
 				Level::Error,
 				concat!(
-					"Expecting ONE `#[sf_layout (...)]` attribute on the struct ",
+					"Expecting ONE `#[widget_layout (...)]` attribute on the struct ",
 					"to indicate the frame's layout."
 				)
 				.into(),
@@ -95,7 +141,7 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 				Span::call_site(),
 				Level::Error,
 				concat!(
-					"Expecting at most one `#[sf_impl (...)]` attribute ",
+					"Expecting at most one `#[widget_impl (...)]` attribute ",
 					"to indicate what widget traits to implement. Found {} of them."
 				)
 				.into(),
@@ -129,103 +175,25 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 		(all_impls, layout_content)
 	};
 
-	let widget_indexes = match data {
-		syn::Data::Union(_) => {
-			errors.push(Diagnostic::spanned(
-				Span::call_site(),
-				Level::Error,
-				"Can't build a struct frame from a union.".into(),
-			));
-			Default::default()
-		}
-		syn::Data::Enum(_) => {
-			errors.push(Diagnostic::spanned(
-				Span::call_site(),
-				Level::Error,
-				"Can't build a struct frame from an enum.".into(),
-			));
-			Default::default()
-		}
-		syn::Data::Struct(content) => {
-			let mut res = HashMap::new();
-			for (field_index, f) in content.fields.into_iter().enumerate() {
-				let (mut raw_attrs, others): (Vec<_>, Vec<_>) =
-					f.attrs.iter().partition(|f| f.path.is_ident("sf_layout"));
-				if raw_attrs.len() > 1 {
-					errors.push(Diagnostic::spanned(
-						f.span(),
-						Level::Error,
-						format!(
-							"Expecting at most one attribute #[sf_layout(...)] per field. Found: {:?}",
-							others
-								.into_iter()
-								.map(|a| a.path.get_ident().unwrap().to_string())
-								.collect::<Vec<_>>()
-						),
-					));
-					todo!();
-				}
-				let (_, attr_details) = match raw_attrs.pop() {
-					Some(d) => (
-						d.span(),
-						d.parse_meta()
-							.map(|m| AttributeLayoutArgs::from_meta(&m))
-							.unwrap_or_else(|e| Err(e.into())),
-					),
-					None => continue,
-				};
-				// Extract attr_details
-				let attr_details = match attr_details {
-					Ok(d) => d,
-					Err(e) => {
-						errors.push(Diagnostic::spanned(f.span(), Level::Error, format!("{}", e)));
-						continue;
-					}
-				};
-
-				let field = f.ident.as_ref().map(|i| Member::Named(i.clone())).unwrap_or(
-					Member::Unnamed(syn::Index { index: field_index as u32, span: f.span() }),
-				);
-
-				let details = FieldDetails {
-					// Accessing the widget
-					field_widget: move |parent, mutable| {
-						let m = if mutable { quote!("mut") } else { quote!() };
-						quote!((&#m #parent.#field))
+	let widget_indexes: HashMap<_, _> = layout_content
+		.indices
+		.iter()
+		.map(|ContentMap { c, index, .. }| {
+			(
+				c.value(),
+				FieldDetails {
+					access_field: |this| {
+						let parts = index.iter().map(|i| match i {
+							Content::Bracked(b) => quote!([#b]),
+							Content::Dot(s) => quote!(.#s),
+						});
+						quote!(#this #(#parts)*)
 					},
-					// Corresponding enum variant
-					enum_variant: if attr_details.ignore_mouse_event {
-						None
-					} else {
-						Some(Ident::new(
-							&f.ident
-								.as_ref()
-								.map(|i| i.to_string().to_case(Case::Pascal))
-								.unwrap_or("_".to_owned() + &field_index.to_string()),
-							f.ident.span(),
-						))
-					},
-					// Type
-					field_ty: f.ty,
-					// Widget Type
-					field_widget_ty: quote!(f.ty),
-					// Size
-					size: RefCell::new(None),
-				};
-				if res.insert(attr_details.name.value(), details).is_some() {
-					errors.push(Diagnostic::spanned(
-						attr_details.name.span(),
-						Level::Error,
-						format!(
-							"There are multiple fields of frame name {:?}.",
-							attr_details.name.value()
-						),
-					));
-				}
-			}
-			res
-		}
-	};
+					size: None.into(),
+				},
+			)
+		})
+		.collect();
 
 	let mut frame_width = None;
 
@@ -246,8 +214,8 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 			let line = line as u16;
 			let line_parts = line_content.into_iter().map(
 				|(WidgetLine { widget_char, line_index, .. }, suffix)| {
-					let FieldDetails { field_widget, .. } = &widget_indexes[&widget_char];
-					let w = field_widget(quote!(self), false);
+					let FieldDetails { access_field, .. } = &widget_indexes[&widget_char];
+					let w = access_field(quote!(self));
 					quote! {
 						#w.display_line(f, #line_index)?;
 						f.write_str(#suffix)?;
@@ -376,8 +344,15 @@ mod tests {
 	#[test]
 	fn a() {
 		let input = quote! {
-			#[sf_impl(EventBubblingWidget)]
-			#[sf_layout (
+			#[widget_impl(EventBubblingWidget)]
+			#[widget_layout (
+				{
+					'c' => .content,
+					'H' => .header,
+					'l' => .left,
+					'r' => .right,
+					'F' => .footer,
+				},
 				"*-------------*",
 				"| HHHHHHHHHHH |",
 				"|   ccccccc   |",
@@ -387,48 +362,10 @@ mod tests {
 				"*-------------*",
 			)]
 			struct MyFrame {
-				#[sf_layout(name = 'c')]
 				content: Img,
-				#[sf_layout(name = 'H')]
 				header: Img,
-				#[sf_layout(name = 'l')]
 				left: Img,
-				#[sf_layout(name = 'r')]
 				right: Img,
-				#[sf_layout(name = 'F')]
-				footer: Img,
-			}
-		};
-		let (result, errors) = run(parse2(input).unwrap());
-		println!("{}", result);
-		println!("--------------------------");
-		println!("{:#?}", errors);
-		assert!(errors.is_empty());
-	}
-
-	#[test]
-	fn b() {
-		let input = quote! {
-			#[sf_impl(EventBubblingWidget)]
-			#[sf_layout (
-				"*-------------*",
-				"| HHHHHHHHHHH |",
-				"|   ccccccc   |",
-				"| l ccccccc r |",
-				"|   ccccccc   |",
-				"| FFFFFFFFFFF |",
-				"*-------------*",
-			)]
-			struct MyFrame {
-				#[sf_layout(name = 'c')]
-				content: Img,
-				#[sf_layout(name = 'H')]
-				header: Img,
-				#[sf_layout(name = 'l')]
-				left: Img,
-				#[sf_layout(name = 'r')]
-				right: Img,
-				#[sf_layout(name = 'F')]
 				footer: Img,
 			}
 		};
@@ -442,15 +379,21 @@ mod tests {
 	#[test]
 	fn c() {
 		let input = quote! {
-			#[sf_layout("0 1 2 3", "0 1 2 3", "0 1 2 3")]
+			#[widget_layout(
+				{
+					'0' => .left_border,
+					'1' => .left_center_border,
+					'2' => .right_center_border,
+					'3' => .right_border,
+				},
+				"0 1 2 3",
+				"0 1 2 3",
+				"0 1 2 3",
+			)]
 			pub struct TabSelect {
-				#[sf_layout(name = '0')]
 				left_border: Border,
-				#[sf_layout(name = '1')]
 				left_center_border: Border,
-				#[sf_layout(name = '2')]
 				right_center_border: Border,
-				#[sf_layout(name = '3')]
 				right_border: Border,
 
 				selected: u8,

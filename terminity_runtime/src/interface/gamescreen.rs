@@ -1,15 +1,13 @@
 use std::sync::Arc;
+use terminity::{wstr, Size};
 
 use crate::game_handling::{GameCommands, GameHandle, GameLib};
 use ouroboros::self_referencing;
 use terminity::{
 	events::Event,
 	img,
-	widgets::{
-		positionning::{div::Div3, Clip, Position, Spacing},
-		WidgetString,
-	},
-	wstr,
+	widget_string::WidgetString,
+	widgets::positionning::{div::Div3, Clip, Position, Spacing},
 };
 
 #[self_referencing]
@@ -24,11 +22,11 @@ pub struct GameScreen {
 }
 
 impl GameScreen {
-	pub fn open(lib: Arc<GameLib>) -> Self {
+	pub fn open(lib: Arc<GameLib>, init_size: Size) -> Self {
 		let (snd, rcv) = kanal::bounded(516);
 		GameScreenBuilder {
 			lib,
-			game_builder: |lib: &Arc<GameLib>| unsafe { lib.start(rcv).unwrap() },
+			game_builder: |lib: &Arc<GameLib>| unsafe { lib.start(rcv, init_size).unwrap() },
 			display: WidgetString::from(wstr!("")),
 			events: snd,
 		}
@@ -56,7 +54,7 @@ impl GameScreen {
 				)
 				.with_content_alignment(Position::Center)
 				.with_content_pos(Position::Start)
-				.with_forced_size(size),
+				.with_exact_size(size),
 			)
 		}
 	}

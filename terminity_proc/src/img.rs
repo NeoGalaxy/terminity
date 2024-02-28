@@ -8,7 +8,7 @@ use syn::{
 	LitStr, Token,
 };
 
-use crate::wstr::{self, LineData};
+use crate::wstr;
 
 #[allow(dead_code)]
 pub struct ImgMacro {
@@ -23,54 +23,45 @@ impl Parse for ImgMacro {
 
 pub fn run(input: ImgMacro) -> (TokenStream, Vec<Diagnostic>) {
 	let mut errors = vec![];
-	let mut line_data = vec![];
 	let mut content = String::new();
+	let mut lines = Vec::new();
 	let mut width = None;
 
 	for line in input.lines {
-		let (mut l_lines, l_content, l_errors) = wstr::build_str(line.value()).unwrap_or((
-			vec![LineData { pos: 0, width: 0 }],
-			String::new(),
-			vec![],
-		));
-
-		for l in &l_lines {
-			if let Some(w) = width {
-				if l.width != w {
-					errors.push(Diagnostic::spanned(
-						line.span(),
-						Level::Error,
-						"All the lines are not of the same length".to_owned(),
-					))
-				}
-			} else {
-				width = Some(l.width)
+		let (l_width, l_content, mut l_errors) = wstr::parse_line(&line);
+		if let Some(width) = width {
+			if l_width != width {
+				errors.push(Diagnostic::spanned(
+					line.span(),
+					Level::Error,
+					"All the lines are not of the same length".to_owned(),
+				))
 			}
+		} else {
+			width = Some(l_width)
 		}
 
-		let start_pos = content.len() as u16;
+		errors.append(&mut l_errors);
+		let pos = content.len() as u16;
+		lines.push(quote!(terminity::widget_string::LineInfo {pos: #pos, width: #l_width}));
 		content.push_str(&l_content);
-		for data in &mut l_lines {
-			data.pos += start_pos;
-		}
-		line_data.extend(l_lines);
-		errors.extend(l_errors);
 	}
 
-	let height = line_data.len() as u16;
+	let height = lines.len() as u16;
 	let width = width.unwrap_or(0);
-	let content = wstr::details_to_tokens(line_data, content);
 
 	(
-		quote! {
+		quote!(
 			unsafe { terminity::widgets::content::Img::from_raw_parts(
-				#content,
+				terminity::widget_string::WidgetStr::from_content_unchecked(
+					#content,
+					&[#(#lines),*]
+				),
 				terminity::Size {
 					width: #width,
 					height: #height
 				}
-			) }
-		},
+		) }),
 		errors,
 	)
 }

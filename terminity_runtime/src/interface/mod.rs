@@ -259,7 +259,8 @@ impl Hub {
 
 	pub async fn update<E: terminity::events::EventPoller>(&mut self, poller: E) {
 		if let Ok(game) = self.ctx.run_game.1.try_recv() {
-			self.screen.current = HubScreen::Game(GameScreen::open(game))
+			self.screen.current =
+				HubScreen::Game(GameScreen::open(game, self.size - Size { width: 2, height: 4 }))
 		}
 
 		while let Ok(game) = self.ctx.add_game.1.try_recv() {

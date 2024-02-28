@@ -1,22 +1,21 @@
 use terminity::{
-	events::{KeyCode, KeyModifiers, KeyPress},
 	game::WidgetDisplayer,
 	img,
+	widget_string::WidgetStr,
 	widgets::{
-		self,
 		content::{Img, TextArea},
 		positionning::{
 			div::{Div1, Div3},
 			Clip, Position, Spacing,
 		},
-		Widget, WidgetStr,
+		Widget,
 	},
 	wstr, Size,
 };
 
 #[derive(Debug)]
 pub enum StartStage {
-	Stage0 { subtitle: &'static WidgetStr, padding: i16 },
+	Stage0 { subtitle: WidgetStr<'static>, padding: i16 },
 	Stage1 { padding: i16 },
 }
 
@@ -53,7 +52,7 @@ impl StartScreen {
 				)
 				.with_content_alignment(Position::Center)
 				.with_content_pos(Position::Start)
-				.with_forced_size(self.size);
+				.with_exact_size(self.size);
 
 				displayer.run(widget);
 			}
@@ -74,7 +73,7 @@ impl StartScreen {
 					)
 					.with_content_alignment(Position::Center)
 					.with_content_pos(Position::Start)
-					.with_forced_size(self.size),
+					.with_exact_size(self.size),
 				)
 			}
 		}
