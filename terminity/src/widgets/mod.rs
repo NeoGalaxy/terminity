@@ -6,10 +6,16 @@
 //! This crate is currently at a very early development stage. The first changes it might have are
 //! an api for un-resizeable widgets and more widgets.
 
+use std::collections::btree_map;
+use std::collections::hash_map;
+use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Write;
+use std::iter::Enumerate;
 use std::ops::RangeBounds;
+use std::slice;
 
 // use unicode_segmentation::UnicodeSegmentation;
 
@@ -126,16 +132,31 @@ pub trait Widget {
 	fn get_line_display(&self, line: u16) -> WidgetLineDisplay<'_, Self> {
 		WidgetLineDisplay { widget: self, line }
 	}
+}
 
-	/// Tries to resize the widget to the given size.
-	///
-	/// If the widget can't take the given size, it will take the size the closest possible to the
-	/// aimed size. Returns the new effective size.
-	///
-	/// Default behaviour doesn't change anything and returns the current size
-	#[allow(unused_variables)]
-	fn resize(&mut self, size: Size) -> Size {
-		self.size()
+pub trait AsWidget {
+	type WidgetType<'a>: Widget
+	where
+		Self: 'a;
+
+	fn as_widget(&mut self) -> Self::WidgetType<'_>;
+}
+
+impl<W: Widget> AsWidget for W {
+	type WidgetType<'a> = &'a mut Self where Self: 'a;
+
+	fn as_widget(&mut self) -> Self::WidgetType<'_> {
+		self
+	}
+}
+
+impl<W: Widget> Widget for &mut W {
+	fn display_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
+		(*self).display_line(f, line)
+	}
+
+	fn size(&self) -> Size {
+		(*self).size()
 	}
 }
 
@@ -203,18 +224,18 @@ pub trait Widget {
 /// // (2, 2) is inside of the child, AutoPadder bubbles the event by adapting the coordinates.
 /// assert_eq!(my_widget.bubble_event(event1), Some((1, 1)));
 /// ```
-pub trait EventBubblingWidget: Widget {
-	type FinalWidgetData<'a>
+pub trait EventBubbling {
+	type FinalData<'a>
 	where
 		Self: 'a;
 	/// Handles a mouse event. see the [trait](Self)'s doc for more details.
-	fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>, BubblingEvent) -> R>(
+	fn bubble_event<'a, R, F: FnOnce(Self::FinalData<'a>, BubblingEvent) -> R>(
 		&'a mut self,
 		event: BubblingEvent,
 		callback: F,
 	) -> R;
 }
-// pub use terminity_proc::EventBubblingWidget;
+pub use terminity_proc::EventBubbling;
 
 pub struct BubblingEvent {
 	pub event: events::Mouse,
@@ -237,6 +258,61 @@ impl BubblingEvent {
 	pub fn bubble_at(mut self, relative_pos: Position) -> Self {
 		self.current_widget_pos += relative_pos;
 		self
+	}
+}
+
+pub trait AsIndexedIterator {
+	type Index<'a>
+	where
+		Self: 'a;
+	type Value;
+	type Iter<'a>: Iterator<Item = (Self::Index<'a>, &'a mut Self::Value)>
+	where
+		Self: 'a;
+	fn as_iterator(&mut self) -> Self::Iter<'_>;
+}
+
+impl<T> AsIndexedIterator for [T] {
+	type Index<'a> = usize where T: 'a;
+	type Value = T;
+
+	type Iter<'a> = Enumerate<slice::IterMut<'a, T>> where T: 'a;
+
+	fn as_iterator(&mut self) -> Self::Iter<'_> {
+		self.iter_mut().enumerate()
+	}
+}
+
+impl<T> AsIndexedIterator for Vec<T> {
+	type Index<'a> = usize where T: 'a;
+	type Value = T;
+
+	type Iter<'a> = Enumerate<slice::IterMut<'a, T>> where T: 'a;
+
+	fn as_iterator(&mut self) -> Self::Iter<'_> {
+		self.iter_mut().enumerate()
+	}
+}
+
+impl<K, V, S> AsIndexedIterator for HashMap<K, V, S> {
+	type Index<'a> = &'a K where Self: 'a;
+	type Value = V;
+
+	type Iter<'a> = hash_map::IterMut<'a, K, V> where Self: 'a;
+
+	fn as_iterator(&mut self) -> Self::Iter<'_> {
+		self.iter_mut()
+	}
+}
+
+impl<K, V> AsIndexedIterator for BTreeMap<K, V> {
+	type Index<'a> = &'a K where Self: 'a;
+	type Value = V;
+
+	type Iter<'a> = btree_map::IterMut<'a, K, V> where Self: 'a;
+
+	fn as_iterator(&mut self) -> Self::Iter<'_> {
+		self.iter_mut()
 	}
 }
 

@@ -20,6 +20,10 @@ impl<'w> WidgetStr<'w> {
 	pub(crate) fn lines<'a>(&'a self) -> impl Iterator<Item = WidgetLine<'a>> {
 		(0..self.height()).map(|i| self.line_details(i).unwrap())
 	}
+
+	pub fn content_raw(&self) -> &str {
+		self.content
+	}
 }
 
 // #[derive(Debug, Clone, Copy)]
@@ -80,6 +84,10 @@ macro_rules! widget_str {
 
 			pub fn max_width(&self) -> u16 {
 				self.lines.iter().map(|l| l.width).max().unwrap_or(0)
+			}
+
+			pub fn lines_infos(&self) -> &[LineInfo] {
+				&self.lines
 			}
 		}
 	};

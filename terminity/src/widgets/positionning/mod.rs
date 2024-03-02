@@ -2,79 +2,116 @@ pub mod div;
 
 use std::fmt::Write;
 
-use crate::Size;
+use crate::{events::Position, Size};
 
-use super::{EventBubblingWidget, Widget};
+use super::{AsWidget, EventBubbling, Widget};
 
 #[derive(Debug, Clone, Copy)]
-pub enum Position {
+pub enum Positionning {
 	Start,
 	Center,
 	End,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Clip<W> {
+pub struct Clip<W: AsWidget> {
 	pub widget: W,
 	pub size: Size,
-	pub v_pos: Position,
-	pub h_pos: Position,
+	pub v_pos: Positionning,
+	pub h_pos: Positionning,
 }
 
-impl<W: Widget> Widget for Clip<W> {
-	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, mut line: u16) -> std::fmt::Result {
-		let content_height = self.widget.size().height;
+pub struct ClipWidget<W: Widget> {
+	widget: W,
+	size: Size,
+	top_padding: i16,
+	left_padding: i16,
+	right_padding: i16,
+}
+
+impl<W: AsWidget> AsWidget for Clip<W> {
+	type WidgetType<'a> = ClipWidget<W::WidgetType<'a>> where W: 'a;
+
+	fn as_widget(&mut self) -> Self::WidgetType<'_> {
+		let widget = self.widget.as_widget();
+		let content_height = widget.size().height;
 
 		// Padding may be negative
-		let padding = self.size.height as i16 - content_height as i16;
+		let h_padding = self.size.height as i16 - content_height as i16;
 
-		let top_pad = match self.v_pos {
-			Position::Start => 0,
-			Position::Center => padding / 2,
-			Position::End => padding,
+		let top_padding = match self.v_pos {
+			Positionning::Start => 0,
+			Positionning::Center => h_padding / 2,
+			Positionning::End => h_padding,
 		};
-		if (line as i16) < top_pad {
+
+		let w_paddig = self.size.width as i16 - widget.size().width as i16;
+		let left_padding = match self.h_pos {
+			Positionning::Start => 0,
+			Positionning::Center => w_paddig / 2,
+			Positionning::End => w_paddig,
+		};
+
+		ClipWidget {
+			widget,
+			size: self.size,
+			top_padding,
+			left_padding,
+			right_padding: w_paddig - left_padding,
+		}
+	}
+}
+
+impl<W: Widget> Widget for ClipWidget<W> {
+	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, mut line: u16) -> std::fmt::Result {
+		if (line as i16) < self.top_padding {
 			return Spacing::line(self.size().width).display_line(f, 0);
 		}
-		line = (line as i16 - top_pad).try_into().unwrap();
+		line = (line as i16 - self.top_padding).try_into().unwrap();
 
-		if line < self.widget.size().height {
-			let w_pad = self.size.width as i16 - self.widget.size().width as i16;
-			let (l_pad, r_pad) = match self.h_pos {
-				Position::Start => (0, w_pad),
-				Position::Center => {
-					let tmp = w_pad / 2;
-					(tmp, w_pad - tmp)
-				}
-				Position::End => (w_pad, 0),
-			};
-			if l_pad < 0 {
-				self.widget.display_line_in(f, line, (-l_pad as u16)..self.size.width)?;
-			} else {
-				Spacing::line(l_pad as u16).display_line(f, 0)?;
-				self.widget.display_line(f, line)?;
-			}
-			if r_pad > 0 {
-				Spacing::line(r_pad as u16).display_line(f, 0)?;
-			}
-			return Ok(());
+		if line >= self.size.height {
+			return Spacing::line(self.size().width).display_line(f, 0);
 		}
 
-		Spacing::line(self.size().width).display_line(f, 0)?;
+		if self.left_padding + self.right_padding < 0 {
+			self.widget.display_line_in(f, line, (-self.left_padding as u16)..self.size.width)?;
+		} else {
+			Spacing::line(self.left_padding as u16).display_line(f, 0)?;
+			self.widget.display_line(f, line)?;
+		}
+		if self.right_padding > 0 {
+			Spacing::line(self.right_padding as u16).display_line(f, 0)?;
+		}
 		Ok(())
 	}
 
 	fn size(&self) -> Size {
 		self.size
 	}
+}
 
-	fn resize(&mut self, size: Size) -> Size {
-		self.size = size;
-		size
+impl<W: EventBubbling + Widget> EventBubbling for ClipWidget<W> {
+	type FinalData<'a> = Result<W::FinalData<'a>, &'a mut Self> where W: 'a;
+
+	fn bubble_event<'a, R, F: FnOnce(Self::FinalData<'a>, super::BubblingEvent) -> R>(
+		&'a mut self,
+		event: super::BubblingEvent,
+		callback: F,
+	) -> R {
+		if (self.top_padding..self.size.height as i16).contains(&event.pos().line)
+			&& (self.left_padding..self.size.height as i16).contains(&event.pos().column)
+		{
+			self.widget.bubble_event(
+				event.bubble_at(Position { line: self.top_padding, column: self.left_padding }),
+				|data, evt| callback(Ok(data), evt),
+			)
+		} else {
+			callback(Err(self), event)
+		}
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, EventBubbling)]
 pub struct Spacing {
 	pub size: Size,
 	pub c: char,
@@ -101,22 +138,5 @@ impl Widget for Spacing {
 
 	fn size(&self) -> Size {
 		self.size
-	}
-
-	fn resize(&mut self, size: Size) -> Size {
-		self.size = size;
-		size
-	}
-}
-
-impl EventBubblingWidget for Spacing {
-	type FinalWidgetData<'a> = ();
-
-	fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>, super::BubblingEvent) -> R>(
-		&'a mut self,
-		event: super::BubblingEvent,
-		callback: F,
-	) -> R {
-		callback((), event)
 	}
 }

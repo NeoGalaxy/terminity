@@ -11,8 +11,8 @@ use crate::Size;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Position {
-	pub line: u16,
-	pub column: u16,
+	pub line: i16,
+	pub column: i16,
 }
 
 impl Add<Position> for Position {

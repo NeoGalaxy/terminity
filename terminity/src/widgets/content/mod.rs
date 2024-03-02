@@ -1,50 +1,37 @@
 use std::ops::{Deref, DerefMut};
 
+use unicode_width::UnicodeWidthChar;
+
 use super::{
-	positionning::{Position, Spacing},
-	EventBubblingWidget, Widget,
+	positionning::{Positionning, Spacing},
+	AsWidget, EventBubbling, Widget,
 };
 use crate::{
-	widget_string::{line::WidgetLine, WidgetStr, WidgetString},
+	widget_string::{LineInfo, WidgetStr, WidgetString},
 	Size,
 };
 
 #[derive(Debug, Clone)]
 pub struct TextArea {
 	content: WidgetString,
-	horizontal_alignment: Position,
+	horizontal_alignment: Positionning,
 	size: Option<Size>,
-	content_size: Size,
-}
-
-pub struct TextAreaContentGuard<'a> {
-	content: &'a mut WidgetString,
-	size: &'a mut Size,
-}
-
-impl Drop for TextAreaContentGuard<'_> {
-	fn drop(&mut self) {
-		*self.size = Size { width: self.content.max_width(), height: self.content.height() }
-	}
 }
 
 impl TextArea {
 	pub fn center<S: Into<WidgetString>>(text: S) -> Self {
 		let text = text.into();
-		let content_size = Size { width: text.max_width(), height: text.height() };
-		Self { content: text, horizontal_alignment: Position::Center, size: None, content_size }
+		Self { content: text, horizontal_alignment: Positionning::Center, size: None }
 	}
 
 	pub fn left<S: Into<WidgetString>>(text: S) -> Self {
 		let text = text.into();
-		let content_size = Size { width: text.max_width(), height: text.height() };
-		Self { content: text, horizontal_alignment: Position::Start, size: None, content_size }
+		Self { content: text, horizontal_alignment: Positionning::Start, size: None }
 	}
 
 	pub fn right<S: Into<WidgetString>>(text: S) -> Self {
 		let text = text.into();
-		let content_size = Size { width: text.max_width(), height: text.height() };
-		Self { content: text, horizontal_alignment: Position::End, size: None, content_size }
+		Self { content: text, horizontal_alignment: Positionning::End, size: None }
 	}
 
 	pub fn with_size(mut self, size: Size) -> Self {
@@ -56,8 +43,8 @@ impl TextArea {
 		&self.content
 	}
 
-	pub fn content_mut(&mut self) -> TextAreaContentGuard<'_> {
-		TextAreaContentGuard { content: &mut self.content, size: &mut self.content_size }
+	pub fn content_mut(&mut self) -> &mut WidgetString {
+		&mut self.content
 	}
 
 	pub fn set_size(&mut self, size: Option<Size>) {
@@ -65,83 +52,110 @@ impl TextArea {
 	}
 }
 
-// impl Deref for TextArea {
-// 	type Target = WidgetString;
+pub struct TextAreaWidget<'a> {
+	text: WidgetStr<'a>,
+	lines: Vec<LineInfo>,
+	size: Size,
+	horizontal_alignment: Positionning,
+}
 
-// 	fn deref(&self) -> &Self::Target {
-// 		&self.content
-// 	}
-// }
+impl Deref for TextArea {
+	type Target = WidgetString;
 
-// impl DerefMut for TextArea {
-// 	fn deref_mut(&mut self) -> &mut Self::Target {
-// 		&mut self.content
-// 	}
-// }
+	fn deref(&self) -> &Self::Target {
+		&self.content
+	}
+}
 
-impl Widget for TextArea {
+impl DerefMut for TextArea {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.content
+	}
+}
+
+impl AsWidget for TextArea {
+	type WidgetType<'a> = TextAreaWidget<'a>;
+
+	fn as_widget(&mut self) -> Self::WidgetType<'_> {
+		if let Some(size) = self.size {
+			let mut lines = Vec::with_capacity(self.content.height() as usize);
+			for (line_content, line_info) in self
+				.content
+				.lines_infos()
+				.iter()
+				.enumerate()
+				.map(|(i, line)| (self.content.line_details(i as u16).unwrap(), line))
+			{
+				let mut remaining_width = line_info.width;
+				let mut next_pos = 0;
+				let mut chars = line_content.char_indices().peekable();
+
+				while remaining_width > size.width {
+					lines.push(LineInfo { pos: line_info.pos + next_pos, width: size.width });
+					let mut w = 0;
+					while let Some((pos, c)) = chars.peek() {
+						let char_width = c.width().unwrap() as u16;
+						if w + char_width > size.width {
+							next_pos = *pos as u16;
+							break;
+						} else {
+							w += char_width;
+						}
+					}
+					remaining_width -= w;
+				}
+				lines.push(LineInfo { pos: line_info.pos + next_pos, width: remaining_width });
+			}
+			TextAreaWidget {
+				text: self.content.as_wstr(),
+				horizontal_alignment: self.horizontal_alignment,
+				lines,
+				size,
+			}
+		} else {
+			TextAreaWidget {
+				text: self.content.as_wstr(),
+				horizontal_alignment: self.horizontal_alignment,
+				lines: self.content.lines_infos().to_owned(),
+				size: Size { width: self.content.max_width(), height: self.content.height() },
+			}
+		}
+	}
+}
+
+impl Widget for TextAreaWidget<'_> {
 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
-		let Some(line_details) = self.content.line_details(line) else {
+		let text =
+			unsafe { WidgetStr::from_content_unchecked(self.text.content_raw(), &self.lines) };
+
+		let Some(line_details) = text.line_details(line) else {
 			return Spacing::line(self.size().width).display_line(f, line);
 		};
 
-		let padding = self.size().width as i32 - line_details.width() as i32;
+		debug_assert!(self.size().width >= line_details.width());
+		let padding = self.size().width - line_details.width();
 
 		let (l_padding, r_padding) = match self.horizontal_alignment {
-			Position::Start => (0, padding),
-			Position::Center => (padding / 2, padding - padding / 2),
-			Position::End => (padding, 0),
+			Positionning::Start => (0, padding),
+			Positionning::Center => (padding / 2, padding - padding / 2),
+			Positionning::End => (padding, 0),
 		};
 
-		let (left, center, right) = match (l_padding, r_padding) {
-			(..=-1, ..=-1) => (
-				Spacing::line(0),
-				Some((-l_padding) as u16..(line_details.width() as i32 + r_padding) as u16),
-				Spacing::line(0),
-			),
-			(0.., ..=-1) => (
-				Spacing::line(l_padding as u16),
-				Some(0..(line_details.width() as i32 + r_padding) as u16),
-				Spacing::line(0),
-			),
-			(..=-1, 0..) => (
-				Spacing::line(0),
-				Some((-l_padding) as u16..line_details.width()),
-				Spacing::line(r_padding as u16),
-			),
-			(0.., 0..) => (Spacing::line(l_padding as u16), None, Spacing::line(r_padding as u16)),
-		};
-
-		// write!(
-		// 	f,
-		// 	"{l_padding}, {r_padding} => ({}, {center:?}, {})",
-		// 	left.size.width, right.size.width
-		// )?;
-
-		left.display_line(f, line)?;
-		if let Some(range) = center {
-			line_details.display_line_in(f, 0, range)?;
-		} else {
-			line_details.display_line(f, 0)?;
-		}
-		right.display_line(f, line)?;
+		Spacing::line(l_padding).display_line(f, line)?;
+		line_details.display_line(f, 0)?;
+		Spacing::line(r_padding as u16).display_line(f, line)?;
 		Ok(())
 	}
 
 	fn size(&self) -> Size {
-		self.size.unwrap_or(self.content_size)
-	}
-
-	fn resize(&mut self, size: Size) -> Size {
-		self.size = Some(size);
-		size
+		self.size
 	}
 }
 
-impl EventBubblingWidget for TextArea {
-	type FinalWidgetData<'a> = &'a Self;
+impl EventBubbling for TextArea {
+	type FinalData<'a> = &'a Self;
 
-	fn bubble_event<'a, R, F: FnOnce(Self::FinalWidgetData<'a>, super::BubblingEvent) -> R>(
+	fn bubble_event<'a, R, F: FnOnce(Self::FinalData<'a>, super::BubblingEvent) -> R>(
 		&'a mut self,
 		event: super::BubblingEvent,
 		callback: F,
@@ -181,7 +195,7 @@ impl Widget for Img<'_> {
 		self.size
 	}
 
-	fn resize(&mut self, _: Size) -> Size {
-		self.size
-	}
+	// fn resize(&mut self, _: Size) -> Size {
+	// 	self.size
+	// }
 }

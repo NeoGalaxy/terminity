@@ -10,7 +10,7 @@
 
 */
 
-// mod derive_event_bubbling_widget;
+mod derive_event_bubbling;
 mod derive_struct_frame;
 mod frame;
 mod img;
@@ -159,16 +159,15 @@ pub fn widget_display(tokens: TokenStream) -> TokenStream {
 	proc_macro::TokenStream::from(expanded)
 }
 
-// #[proc_macro_error]
-// #[proc_macro_derive(EventBubblingWidget)]
-// pub fn event_bubbling_widget(tokens: TokenStream) -> TokenStream {
-// 	let (tokens, errors) =
-// 		derive_event_bubbling_widget::run(parse_macro_input!(tokens as DeriveInput));
-// 	for e in errors {
-// 		e.emit();
-// 	}
-// 	proc_macro::TokenStream::from(tokens)
-// }
+#[proc_macro_error]
+#[proc_macro_derive(EventBubbling)]
+pub fn event_bubbling_widget(tokens: TokenStream) -> TokenStream {
+	let (tokens, errors) = derive_event_bubbling::run(parse_macro_input!(tokens as DeriveInput));
+	for e in errors {
+		e.emit();
+	}
+	proc_macro::TokenStream::from(tokens)
+}
 
 #[proc_macro_error]
 #[proc_macro]
