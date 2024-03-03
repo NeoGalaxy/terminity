@@ -1,21 +1,20 @@
 use terminity::{
-	game::WidgetDisplayer,
+	game::GameContext,
 	img,
-	widget_string::WidgetStr,
 	widgets::{
 		content::{Img, TextArea},
 		positionning::{
 			div::{Div1, Div3},
-			Clip, Position, Spacing,
+			Clip, Positionning, Spacing,
 		},
-		Widget,
+		AsWidget, Widget,
 	},
 	wstr, Size,
 };
 
 #[derive(Debug)]
 pub enum StartStage {
-	Stage0 { subtitle: WidgetStr<'static>, padding: i16 },
+	Stage0,
 	Stage1 { padding: i16 },
 }
 
@@ -24,76 +23,63 @@ pub struct StartScreen {
 	tick: u64,
 	pub size: Size,
 	stage: StartStage,
+	stage0: Div3<Spacing, Img<'static>, TextArea>,
+	stage1: Div1<Clip<Img<'static>>>,
 }
 
 impl StartScreen {
 	pub fn new(size: Size) -> Self {
+		let padding = (size.height as i16 - TERMINITY_TEXT.size().height as i16 - 1) / 2;
 		Self {
 			tick: 0,
 			size,
-			stage: StartStage::Stage0 {
-				subtitle: wstr!(r"Press any key to start."),
-				padding: (size.height as i16 - TERMINITY_TEXT.size().height as i16 - 1) / 2,
-			},
+			stage: StartStage::Stage0,
+			stage0: Div3::new(
+				Spacing { size: Size { width: size.width, height: padding as u16 }, c: ' ' },
+				TERMINITY_TEXT,
+				TextArea::center(wstr!(r"Press any key to start.")),
+			)
+			.with_content_alignment(Positionning::Center)
+			.with_content_pos(Positionning::Start)
+			.with_exact_size(size),
+			stage1: Div1::new(Clip {
+				widget: TERMINITY_TEXT,
+				size,
+				v_pos: Positionning::End,
+				h_pos: Positionning::Center,
+			})
+			.with_content_alignment(Positionning::Center)
+			.with_content_pos(Positionning::Start)
+			.with_exact_size(size),
 		}
 	}
 
-	pub fn disp<D: WidgetDisplayer>(&mut self, displayer: D) {
-		match self.stage {
-			StartStage::Stage0 { subtitle, padding } => {
-				let widget = &Div3::new(
-					false,
-					Spacing {
-						size: Size { width: self.size.width, height: padding as u16 },
-						c: ' ',
-					},
-					TERMINITY_TEXT,
-					TextArea::center(subtitle),
-				)
-				.with_content_alignment(Position::Center)
-				.with_content_pos(Position::Start)
-				.with_exact_size(self.size);
-
-				displayer.run(widget);
-			}
-			StartStage::Stage1 { padding } => {
-				let mut size = TERMINITY_TEXT.size();
-				let tmp = (size.height as i16) + padding;
-				size.height = if tmp >= 0 { tmp as u16 } else { 0 };
-
-				displayer.run(
-					&Div1::new(
-						false,
-						Clip {
-							widget: TERMINITY_TEXT,
-							size,
-							v_pos: Position::End,
-							h_pos: Position::Center,
-						},
-					)
-					.with_content_alignment(Position::Center)
-					.with_content_pos(Position::Start)
-					.with_exact_size(self.size),
-				)
-			}
-		}
-	}
-
-	pub fn update<E: terminity::events::EventPoller>(&mut self, poller: E) -> bool {
+	pub fn update<E: GameContext>(&mut self, poller: E) -> bool {
 		for e in poller.events() {
 			match e {
 				terminity::events::Event::KeyPress(_) => {
-					if let StartStage::Stage0 { padding, .. } = self.stage {
+					if let StartStage::Stage0 = self.stage {
 						self.tick = 0;
-						self.stage = StartStage::Stage1 { padding };
+						self.stage = StartStage::Stage1 {
+							padding: self.stage0.widgets.0.size.height as i16,
+						};
 					}
 				}
 
 				terminity::events::Event::Resize(size) => {
-					let (StartStage::Stage0 { padding, .. } | StartStage::Stage1 { padding }) =
-						&mut self.stage;
-					// update by adding the difference
-					*padding += size.height as i16 / 2 - self.size.height as i16 / 2;
+					match &mut self.stage {
+						StartStage::Stage0 => {
+							let mut padding = self.stage0.widgets.0.size.height;
+							// update by adding the difference
+							padding += size.height / 2;
+							padding = padding.saturating_sub(self.size.height / 2);
+
+							self.stage0.widgets.0.size.height = padding;
+						}
+						StartStage::Stage1 { padding } => {
+							*padding += size.height as i16 / 2 - self.size.height as i16 / 2;
+						}
+					};
 					self.size = size;
 				}
 				_ => (),
@@ -101,27 +87,27 @@ impl StartScreen {
 		}
 
 		match &mut self.stage {
-			StartStage::Stage0 { subtitle, .. } => {
+			StartStage::Stage0 => {
 				if self.tick % 10 == 0 {
 					match self.tick / 10 {
 						1 => {
-							*subtitle = wstr!("Press any key to start..");
+							*self.stage0.widgets.2 = wstr!("Press any key to start..").into();
 						}
 						2 => {
-							*subtitle = wstr!("Press any key to start...");
+							*self.stage0.widgets.2 = wstr!("Press any key to start...").into();
 						}
 						3 => {
-							*subtitle = wstr!("Press any key to start....");
+							*self.stage0.widgets.2 = wstr!("Press any key to start....").into();
 						}
 						4 => {
-							*subtitle = wstr!("Press any key to start.....");
+							*self.stage0.widgets.2 = wstr!("Press any key to start.....").into();
 						}
 						5 => {
-							*subtitle = wstr!("Press any key to start");
+							*self.stage0.widgets.2 = wstr!("Press any key to start").into();
 						}
 						_ => {
 							self.tick = 0;
-							*subtitle = wstr!("Press any key to start.");
+							*self.stage0.widgets.2 = wstr!("Press any key to start.").into();
 						}
 					}
 				}
@@ -135,6 +121,19 @@ impl StartScreen {
 				}
 			}
 		}
+
+		// Display
+		match self.stage {
+			StartStage::Stage0 => poller.display(&self.stage0.as_widget()),
+			StartStage::Stage1 { padding } => {
+				let mut size = TERMINITY_TEXT.size();
+				let tmp = (size.height as i16) + padding;
+				size.height = if tmp >= 0 { tmp as u16 } else { 0 };
+				self.stage1.widgets.0.size = size;
+				poller.display(&self.stage1.as_widget())
+			}
+		}
+
 		false
 	}
 }

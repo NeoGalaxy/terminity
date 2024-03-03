@@ -8,8 +8,8 @@ use std::{
 
 use rand::distributions::{Distribution, Standard};
 use terminity::{
-	events::{CommandEvent, Event, EventPoller, KeyCode, KeyModifiers, KeyPress},
-	game::WidgetDisplayer,
+	events::{CommandEvent, Event, KeyCode, KeyModifiers, KeyPress},
+	game::GameContext,
 	Size,
 };
 use tokio::{
@@ -34,18 +34,11 @@ mod mainscreen;
 mod start;
 
 #[derive(Debug)]
-pub struct GameData {
-	uid: usize,
-	name: String,
-	lib: Arc<GameLib>,
-}
-
-#[derive(Debug)]
 pub enum GameStatus {
 	Unloaded,
 	Loading(JoinHandle<Result<GameLib, libloading::Error>>),
 	Loaded(Arc<GameLib>),
-	Running(Arc<GameLib>),
+	// Running(Arc<GameLib>),
 }
 
 mod hub_games {
@@ -111,13 +104,13 @@ mod hub_games {
 			self.content.into_values().flatten()
 		}
 
-		pub fn contains_key(&self, id: usize) -> bool {
-			self.get(id).is_some()
-		}
+		// pub fn contains_key(&self, id: usize) -> bool {
+		// 	self.get(id).is_some()
+		// }
 
-		pub(crate) fn values(&self) -> impl Iterator<Item = &(GameDataLatest, GameStatus)> {
-			self.content.values().flatten()
-		}
+		// pub(crate) fn values(&self) -> impl Iterator<Item = &(GameDataLatest, GameStatus)> {
+		// 	self.content.values().flatten()
+		// }
 
 		pub(crate) fn values_mut(
 			&mut self,
@@ -156,22 +149,22 @@ enum HubScreen {
 	Game(GameScreen),
 }
 
-pub(crate) struct PollerMap<'a, P: EventPoller, F: FnMut(Event) -> Option<Event>>(
+pub(crate) struct PollerMap<'a, P: GameContext, F: FnMut(Event) -> Option<Event>>(
 	&'a P,
 	RefCell<F>,
 );
-pub(crate) struct PollerMapIter<'a, P: EventPoller + 'a, F: FnMut(Event) -> Option<Event>>(
+pub(crate) struct PollerMapIter<'a, P: GameContext + 'a, F: FnMut(Event) -> Option<Event>>(
 	P::Iter<'a>,
 	&'a RefCell<F>,
 );
 
-impl<'a, P: EventPoller, F: FnMut(Event) -> Option<Event>> PollerMap<'a, P, F> {
+impl<'a, P: GameContext, F: FnMut(Event) -> Option<Event>> PollerMap<'a, P, F> {
 	pub fn new(poller: &'a P, f: F) -> Self {
 		Self(poller, f.into())
 	}
 }
 
-impl<P: EventPoller, F: FnMut(Event) -> Option<Event>> EventPoller for PollerMap<'_, P, F> {
+impl<P: GameContext, F: FnMut(Event) -> Option<Event>> GameContext for PollerMap<'_, P, F> {
 	type Iter<'a> = PollerMapIter<'a, P, F> where Self: 'a;
 
 	fn cmd(&self, command: CommandEvent) {
@@ -181,9 +174,13 @@ impl<P: EventPoller, F: FnMut(Event) -> Option<Event>> EventPoller for PollerMap
 	fn events(&self) -> Self::Iter<'_> {
 		PollerMapIter(self.0.events(), &self.1)
 	}
+
+	fn display<W: terminity::widgets::Widget>(&self, widget: &W) {
+		self.0.display(widget)
+	}
 }
 
-impl<P: EventPoller, F: FnMut(Event) -> Option<Event>> Iterator for PollerMapIter<'_, P, F> {
+impl<P: GameContext, F: FnMut(Event) -> Option<Event>> Iterator for PollerMapIter<'_, P, F> {
 	type Item = Event;
 
 	fn next(&mut self) -> Option<Self::Item> {
@@ -249,15 +246,7 @@ impl Hub {
 		}
 	}
 
-	pub fn disp<D: WidgetDisplayer>(&mut self, displayer: D) {
-		match &mut self.screen.current {
-			HubScreen::Start => self.screen.start.disp(displayer),
-			HubScreen::Main => self.screen.main.disp(displayer, &self.ctx.games),
-			HubScreen::Game(game) => game.disp(displayer, self.size),
-		}
-	}
-
-	pub async fn update<E: terminity::events::EventPoller>(&mut self, poller: E) {
+	pub async fn update<E: GameContext>(&mut self, poller: E) {
 		if let Ok(game) = self.ctx.run_game.1.try_recv() {
 			self.screen.current =
 				HubScreen::Game(GameScreen::open(game, self.size - Size { width: 2, height: 4 }))
@@ -316,16 +305,17 @@ impl Hub {
 				self.screen.main.update(poller, &mut self.ctx).await;
 			}
 			HubScreen::Game(g) => {
-				let GameCommands { close } = g.update(poller);
+				let GameCommands { close } = g.update(poller, self.size);
 				exit_game = exit_game || close;
-			}
-		}
 
-		if exit_game {
-			let mut game = HubScreen::Main;
-			mem::swap(&mut self.screen.current, &mut game);
-			let HubScreen::Game(game) = game else { unreachable!() };
-			game.finish();
+				if exit_game {
+					let mut game = HubScreen::Main;
+					mem::swap(&mut self.screen.current, &mut game);
+					let HubScreen::Game(game) = game else { unreachable!() };
+
+					game.finish();
+				}
+			}
 		}
 	}
 

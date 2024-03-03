@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use terminity::{wstr, Size};
+use terminity::{game::GameContext, widgets::AsWidget, wstr, Size};
 
 use crate::game_handling::{GameCommands, GameHandle, GameLib};
 use ouroboros::self_referencing;
@@ -7,7 +7,7 @@ use terminity::{
 	events::Event,
 	img,
 	widget_string::WidgetString,
-	widgets::positionning::{div::Div3, Clip, Position, Spacing},
+	widgets::positionning::{div::Div3, Clip, Positionning, Spacing},
 };
 
 #[self_referencing]
@@ -32,38 +32,33 @@ impl GameScreen {
 		}
 		.build()
 	}
-	pub(crate) fn disp<D: terminity::game::WidgetDisplayer>(
-		&self,
-		displayer: D,
-		size: terminity::Size,
-	) {
-		if let Some(display) = self.borrow_game().display() {
+
+	pub(crate) fn update<Ctx: GameContext>(&mut self, ctx: Ctx, size: Size) -> GameCommands {
+		for e in ctx.events() {
+			let _ = self.with_events_mut(|events| events.try_send(e));
+		}
+		let res = self.with_game_mut(|g| g.tick());
+		if let Some(display) = res.1 {
 			let mut clip_size = size;
 			clip_size.height -= 2;
-			displayer.run(
+			ctx.display(
 				&Div3::new(
-					false,
 					img!("Running Game"),
 					Spacing::line(size.width).with_char('-'),
 					Clip {
 						widget: display,
 						size: clip_size,
-						v_pos: Position::Center,
-						h_pos: Position::Center,
+						v_pos: Positionning::Center,
+						h_pos: Positionning::Center,
 					},
 				)
-				.with_content_alignment(Position::Center)
-				.with_content_pos(Position::Start)
-				.with_exact_size(size),
+				.with_content_alignment(Positionning::Center)
+				.with_content_pos(Positionning::Start)
+				.with_exact_size(size)
+				.as_widget(),
 			)
 		}
-	}
-
-	pub(crate) fn update<P: terminity::events::EventPoller>(&mut self, poller: P) -> GameCommands {
-		for e in poller.events() {
-			let _ = self.with_events_mut(|events| events.try_send(e));
-		}
-		self.with_game_mut(|g| g.tick())
+		res.0
 	}
 
 	pub(crate) fn finish(mut self) -> Arc<GameLib> {

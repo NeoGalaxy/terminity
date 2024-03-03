@@ -143,7 +143,7 @@ impl Widget for TextAreaWidget<'_> {
 
 		Spacing::line(l_padding).display_line(f, line)?;
 		line_details.display_line(f, 0)?;
-		Spacing::line(r_padding as u16).display_line(f, line)?;
+		Spacing::line(r_padding).display_line(f, line)?;
 		Ok(())
 	}
 

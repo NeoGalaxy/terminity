@@ -1,7 +1,8 @@
 use terminity::{
 	events::KeyCode,
+	game::GameContext,
 	widgets::{
-		positionning::{div::Div1, Position, Spacing},
+		positionning::{div::CollDiv, Positionning, Spacing},
 		Widget,
 	},
 	Size,
@@ -18,6 +19,22 @@ pub struct LibraryTab {
 	size: Size,
 }
 
+pub type DisplayWidget<'a> = CollDiv<Vec<GameEntry<'a>>>;
+
+pub fn display<'a>(library: &'a mut LibraryTab, games: &'a HubGames) -> DisplayWidget<'a> {
+	let content: Vec<_> = games
+		.list
+		.iter()
+		.enumerate()
+		.map(|(i, g)| GameEntry(games.get(*g), i == library.selected, library.tick))
+		.collect();
+
+	CollDiv::new(content)
+		.with_content_alignment(Positionning::Center)
+		.with_content_pos(Positionning::Start)
+		.with_exact_size(library.size)
+}
+
 #[derive(Debug)]
 pub struct GameEntry<'a>(Option<&'a (GameDataLatest, GameStatus)>, bool, u8);
 
@@ -28,7 +45,7 @@ impl Widget for GameEntry<'_> {
 				GameStatus::Unloaded => "unloaded  ",
 				GameStatus::Loading(_) => "loading...",
 				GameStatus::Loaded(_) => "ready     ",
-				GameStatus::Running(_) => "running...",
+				// GameStatus::Running(_) => "running...",
 			};
 			let subpath = subpath.display();
 			write!(
@@ -58,34 +75,11 @@ impl Widget for GameEntry<'_> {
 }
 
 impl LibraryTab {
-	// add code here
-	pub fn display_line(
-		&self,
-		f: &mut std::fmt::Formatter<'_>,
-		line: u16,
-		games: &HubGames,
-	) -> std::result::Result<(), std::fmt::Error> {
-		let selected = line as usize == self.selected;
-		if let Some(&game_id) = games.list.get(line as usize) {
-			let game = games.get(game_id);
-			Div1::new(true, GameEntry(game, selected, self.tick))
-				.with_exact_size(Size { width: self.size.width, height: 1 })
-				.with_content_pos(Position::Center)
-				.display_line(f, 0)
-		} else {
-			Spacing::line(self.size.width).display_line(f, 0)
-		}
-	}
-
 	pub(crate) fn new(size: Size) -> LibraryTab {
 		LibraryTab { selected: 0, tick: 0, size }
 	}
 
-	pub(crate) fn update<P: terminity::events::EventPoller>(
-		&mut self,
-		poller: P,
-		ctx: &mut Context,
-	) {
+	pub(crate) fn update<Ctx: GameContext>(&mut self, poller: Ctx, ctx: &mut Context) {
 		self.tick = self.tick.wrapping_add(1);
 		for e in poller.events() {
 			if let terminity::events::Event::KeyPress(k) = e {

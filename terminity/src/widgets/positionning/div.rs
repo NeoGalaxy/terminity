@@ -438,10 +438,10 @@ where
 	Coll: AsIndexedIterator,
 	for<'a> Coll::Value: AsWidget,
 {
-	pub fn new(horizontal: bool, coll: Coll) -> Self {
+	pub fn new(coll: Coll) -> Self {
 		Self {
 			collection: coll,
-			horizontal,
+			horizontal: false,
 			content_alignment: Positionning::Start,
 			content_pos: Positionning::Start,
 			min_height: None,
@@ -462,6 +462,7 @@ where
 	setters_getters! {
 		content_alignment: Positionning,
 		content_pos: Positionning,
+		horizontal: bool,
 		min_height: Option<u16>,
 		min_width: Option<u16>,
 		max_height: Option<u16>,

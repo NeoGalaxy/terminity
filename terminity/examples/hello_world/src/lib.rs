@@ -6,10 +6,10 @@ use terminity::widget_string::WidgetString;
 use terminity::widgets::content::TextArea;
 
 use terminity::widgets::positionning::div::Div2;
-use terminity::widgets::positionning::{Clip, Position};
+use terminity::widgets::positionning::{Clip, Positionning};
 use terminity::widgets::Widget;
 use terminity::{build_game, img, Size};
-use terminity::{events::EventPoller, game::Game};
+use terminity::{events::GameContext, game::Game};
 
 struct DebugAsDisplay<T: Debug>(T);
 
@@ -79,7 +79,7 @@ impl Game for HelloWorld {
 		);
 	}
 
-	fn update<E: EventPoller>(&mut self, events: E) {
+	fn update<E: GameContext>(&mut self, events: E) {
 		self.events.extend(events.events().map(|v| (v, 0)));
 	}
 

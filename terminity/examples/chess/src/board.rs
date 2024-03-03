@@ -5,7 +5,7 @@ use std::{
 };
 use terminity::{
 	events::Position,
-	widgets::{EventBubblingWidget, Widget},
+	widgets::{EventBubbling, Widget},
 	Size,
 };
 
@@ -406,13 +406,13 @@ impl Widget for Board {
 	}
 }
 
-impl EventBubblingWidget for Board {
-	type FinalWidgetData<'a> = Option<(Pos, Option<Tile>)>;
+impl EventBubbling for Board {
+	type FinalData<'a> = Option<(Pos, Option<Tile>)>;
 
 	fn bubble_event<
 		'a,
 		R,
-		F: FnOnce(Self::FinalWidgetData<'a>, terminity::widgets::BubblingEvent) -> R,
+		F: FnOnce(Self::FinalData<'a>, terminity::widgets::BubblingEvent) -> R,
 	>(
 		&'a mut self,
 		event: terminity::widgets::BubblingEvent,

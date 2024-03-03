@@ -1,5 +1,5 @@
-pub mod events;
-pub mod game_handling;
+mod events;
+mod game_handling;
 mod interface;
 
 use anyhow::bail;
@@ -13,11 +13,7 @@ use crossterm::{
 	execute, QueueableCommand as _,
 };
 use game_handling::GameCommands;
-use terminity::{
-	events::{Event, EventPoller},
-	game::WidgetDisplayer,
-	LineDisp, Size,
-};
+use terminity::{build_game::LineDisp, events::Event, game::GameContext, Size};
 use tokio::time::sleep;
 
 use std::{
@@ -35,10 +31,29 @@ struct Args {
 	game: PathBuf,
 }
 
-struct NativeDisplayer;
+struct NativeContext {
+	cmds: RefCell<GameCommands>,
+}
 
-impl WidgetDisplayer for NativeDisplayer {
-	fn run<W: terminity::widgets::Widget>(self, widget: &W) {
+impl NativeContext {
+	fn new() -> Self {
+		Self { cmds: GameCommands::default().into() }
+	}
+}
+
+impl GameContext for &NativeContext {
+	type Iter<'a> = NativePollerIter where Self: 'a;
+	fn cmd(&self, command: terminity::events::CommandEvent) {
+		match command {
+			terminity::events::CommandEvent::CloseApp => self.cmds.borrow_mut().close = true,
+		}
+	}
+
+	fn events(&self) -> Self::Iter<'_> {
+		NativePollerIter
+	}
+
+	fn display<W: terminity::widgets::Widget>(&self, widget: &W) {
 		std::io::stdout()
 			.queue(crossterm::cursor::MoveTo(0, 0))
 			.unwrap()
@@ -51,29 +66,6 @@ impl WidgetDisplayer for NativeDisplayer {
 			print!("\n\r{}", LineDisp(l, widget));
 		}
 		std::io::stdout().flush().unwrap();
-	}
-}
-
-struct NativePoller {
-	cmds: RefCell<GameCommands>,
-}
-
-impl NativePoller {
-	fn new() -> Self {
-		Self { cmds: GameCommands::default().into() }
-	}
-}
-
-impl EventPoller for &NativePoller {
-	type Iter<'a> = NativePollerIter where Self: 'a;
-	fn cmd(&self, command: terminity::events::CommandEvent) {
-		match command {
-			terminity::events::CommandEvent::CloseApp => self.cmds.borrow_mut().close = true,
-		}
-	}
-
-	fn events(&self) -> Self::Iter<'_> {
-		NativePollerIter
 	}
 }
 
@@ -106,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
 		println!("----------------------------------------------");
 		println!("                 FATAL ERROR");
 		println!("----------------------------------------------");
-		println!("Could not retrive the config directory");
+		println!("   Could not retrive the config directory");
 		println!("----------------------------------------------");
 		bail!("Couldn't start Terminity");
 	};
@@ -154,11 +146,9 @@ async fn main() -> anyhow::Result<()> {
 
 	let mut close = false;
 	while !close {
-		let poller = NativePoller::new();
+		let poller = NativeContext::new();
 		hub.update(&poller).await;
 		close = poller.cmds.borrow().close;
-
-		hub.disp(NativeDisplayer);
 
 		sleep(Duration::from_millis(50)).await;
 	}

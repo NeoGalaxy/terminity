@@ -6,9 +6,9 @@ use board::Board;
 
 use terminity::events::{Event, KeyCode, KeyPress, MouseButton, MouseKind};
 use terminity::game::WidgetDisplayer;
-use terminity::widgets::EventBubblingWidget;
+use terminity::widgets::EventBubbling;
 use terminity::{build_game, Size};
-use terminity::{events::EventPoller, game::Game};
+use terminity::{events::GameContext, game::Game};
 
 impl Game for Chess {
 	type DataInput = ();
@@ -22,7 +22,7 @@ impl Game for Chess {
 		displayer.run(&self.board)
 	}
 
-	fn update<E: EventPoller>(&mut self, poller: E) {
+	fn update<E: GameContext>(&mut self, poller: E) {
 		for event in poller.events() {
 			match event {
 				Event::Mouse(e) => {

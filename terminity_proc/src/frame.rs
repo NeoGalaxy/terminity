@@ -1,17 +1,14 @@
-use proc_macro2::TokenStream;
 use proc_macro_error::{Diagnostic, Level};
-use quote::quote;
 use std::{
 	cell::{Cell, RefCell},
 	cmp::Ordering,
-	collections::HashMap,
 	iter,
 };
 use syn::{
 	braced, bracketed,
 	parse::{Parse, ParseStream},
 	parse_quote,
-	punctuated::{Pair, Punctuated},
+	punctuated::Punctuated,
 	token::{self, Brace, Bracket},
 	Expr, Ident, LitChar, LitInt, LitStr, Token,
 };

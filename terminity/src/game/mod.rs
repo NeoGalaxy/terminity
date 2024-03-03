@@ -1,7 +1,9 @@
-use crate::{Size, Widget};
+use crate::{
+	events::{CommandEvent, Event},
+	widgets::Widget,
+	Size,
+};
 use serde::{Deserialize, Serialize};
-
-use crate::events::EventPoller;
 
 pub trait Game {
 	type DataInput: for<'a> Deserialize<'a>;
@@ -9,15 +11,9 @@ pub trait Game {
 
 	fn start(data: Option<Self::DataInput>, size: Size) -> Self;
 
-	fn disp<D: WidgetDisplayer>(&mut self, displayer: D);
-
-	fn update<E: EventPoller>(&mut self, events: E);
+	fn update<Ctx: GameContext>(&mut self, ctx: Ctx);
 
 	fn finish(self) -> Option<Self::DataOutput>;
-}
-
-pub trait WidgetDisplayer {
-	fn run<W: Widget>(self, widget: &W);
 }
 
 #[repr(C)]
@@ -25,4 +21,13 @@ pub struct GameData {
 	pub content: *mut u8,
 	pub size: u32,
 	pub capacity: u32,
+}
+
+pub trait GameContext {
+	type Iter<'a>: Iterator<Item = Event> + 'a
+	where
+		Self: 'a;
+	fn cmd(&self, command: CommandEvent);
+	fn events(&self) -> Self::Iter<'_>;
+	fn display<W: Widget>(&self, widget: &W);
 }

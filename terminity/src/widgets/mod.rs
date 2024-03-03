@@ -14,6 +14,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::fmt::Write;
 use std::iter::Enumerate;
+use std::ops::Deref;
 use std::ops::RangeBounds;
 use std::slice;
 
@@ -152,11 +153,11 @@ impl<W: Widget> AsWidget for W {
 
 impl<W: Widget> Widget for &mut W {
 	fn display_line(&self, f: &mut Formatter<'_>, line: u16) -> std::fmt::Result {
-		(*self).display_line(f, line)
+		self.deref().display_line(f, line)
 	}
 
 	fn size(&self) -> Size {
-		(*self).size()
+		self.deref().size()
 	}
 }
 

@@ -17,7 +17,7 @@ impl<'w> WidgetStr<'w> {
 		Self { content, lines }
 	}
 
-	pub(crate) fn lines<'a>(&'a self) -> impl Iterator<Item = WidgetLine<'a>> {
+	pub(crate) fn lines(&self) -> impl Iterator<Item = WidgetLine<'_>> {
 		(0..self.height()).map(|i| self.line_details(i).unwrap())
 	}
 

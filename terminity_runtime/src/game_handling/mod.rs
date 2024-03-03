@@ -3,10 +3,11 @@ use crossterm::QueueableCommand as _;
 use libloading::{Library, Symbol};
 use std::{convert::AsRef, ffi::OsStr, io::Write as _, mem::size_of, ptr::null_mut, slice};
 use terminity::{
-	events::{CommandEvent, Event, KeyCode, KeyModifiers, KeyPress, TerminityCommandsData},
+	build_game::{TerminityCommandsData, UpdateResults, WidgetBuffer},
+	events::{CommandEvent, Event, KeyCode, KeyModifiers, KeyPress},
 	game::GameData,
 	widgets::Widget,
-	Size, WidgetBuffer, WidgetDisplay,
+	Size, WidgetDisplay,
 };
 
 use tokio::time::sleep;
@@ -100,7 +101,6 @@ impl GameLib {
 	) -> Result<GameHandle, libloading::Error> {
 		let handle = GameBinding {
 			start_game: self.game.get(b"start_game\0")?,
-			disp_game: self.game.get(b"disp_game\0")?,
 			update_game: self.game.get(b"update_game\0")?,
 			close_game: self.game.get(b"close_game\0")?,
 			free_command_buffer: self.game.get(b"free_command_buffer\0")?,
@@ -113,8 +113,7 @@ impl GameLib {
 #[derive(Debug)]
 pub struct GameBinding<'a> {
 	start_game: Symbol<'a, unsafe extern "C" fn(GameData, u16, u16)>,
-	disp_game: Symbol<'a, unsafe extern "C" fn() -> WidgetBuffer>,
-	update_game: Symbol<'a, unsafe extern "C" fn(*const u8, size: u32) -> TerminityCommandsData>,
+	update_game: Symbol<'a, unsafe extern "C" fn(*const u8, size: u32) -> UpdateResults>,
 	close_game: Symbol<'a, unsafe extern "C" fn() -> GameData>,
 	free_command_buffer: Symbol<'a, unsafe extern "C" fn(TerminityCommandsData)>,
 	free_game_data: Symbol<'a, unsafe extern "C" fn(data: GameData)>,
@@ -124,10 +123,7 @@ impl GameBinding<'_> {
 	pub fn start_game(&self, data: GameData, init_size: Size) {
 		unsafe { (self.start_game)(data, init_size.width, init_size.height) }
 	}
-	pub fn disp_game(&self) -> WidgetBuffer {
-		unsafe { (self.disp_game)() }
-	}
-	pub fn update_game(&self, events: *const u8, size: u32) -> TerminityCommandsData {
+	pub fn update_game(&self, events: *const u8, size: u32) -> UpdateResults {
 		unsafe { (self.update_game)(events, size) }
 	}
 	pub fn free_command_buffer(&self, data: TerminityCommandsData) {
@@ -159,28 +155,19 @@ impl<'a> GameHandle<'a> {
 	}
 
 	#[must_use]
-	pub fn display(&self) -> Option<GameDisplay> {
-		let buffer = self.binding.disp_game();
-		if buffer.is_empty() {
-			None
-		} else {
-			Some(GameDisplay(buffer))
-		}
-	}
-
-	pub fn tick(&mut self) -> GameCommands {
+	pub fn tick(&mut self) -> (GameCommands, Option<GameDisplay>) {
 		self.event_buffer.clear();
 		while let Ok(Some(evt)) = self.event_canal.try_recv() {
-			if matches!(
-				evt,
-				Event::KeyPress(KeyPress {
-					code: KeyCode::Char('c'),
-					modifiers: KeyModifiers { shift: false, control: true, alt: false, .. },
-					repeated: _
-				})
-			) {
-				return GameCommands { close: true };
-			}
+			// if matches!(
+			// 	evt,
+			// 	Event::KeyPress(KeyPress {
+			// 		code: KeyCode::Char('c'),
+			// 		modifiers: KeyModifiers { shift: false, control: true, alt: false, .. },
+			// 		repeated: _
+			// 	})
+			// ) {
+			// 	return (GameCommands { close: true }, None);
+			// }
 
 			let size_pos = self.event_buffer.len();
 			self.event_buffer.extend_from_slice(&[0, 0]);
@@ -190,11 +177,11 @@ impl<'a> GameHandle<'a> {
 			self.event_buffer[size_pos] = bytes[0];
 			self.event_buffer[size_pos + 1] = bytes[1];
 		}
-		let cmds_data =
+		let UpdateResults { commands, display } =
 			self.binding.update_game(self.event_buffer.as_ptr(), self.event_buffer.len() as u32);
-		let cmds = GameCommands::read(&cmds_data);
-		self.binding.free_command_buffer(cmds_data);
-		cmds
+		let cmds = GameCommands::read(&commands);
+		self.binding.free_command_buffer(commands);
+		(cmds, if display.is_empty() { None } else { Some(GameDisplay(display)) })
 	}
 
 	pub fn close_save(&mut self) {
@@ -213,7 +200,14 @@ fn run_game_task(game: GameLib, init_size: Size) -> GameTask {
 		let mut game = unsafe { game.start(rcv, init_size) }.unwrap();
 
 		loop {
-			if let Some(display) = game.display() {
+			while crossterm::event::poll(Duration::ZERO).unwrap() {
+				let Some(event) = events::from_crossterm(crossterm::event::read().unwrap()) else {
+					continue;
+				};
+				send.as_async().send(event).await.unwrap();
+			}
+			let (cmds, display) = game.tick();
+			if let Some(display) = display {
 				std::io::stdout()
 					.queue(crossterm::cursor::MoveTo(0, 0))
 					.unwrap()
@@ -225,29 +219,11 @@ fn run_game_task(game: GameLib, init_size: Size) -> GameTask {
 				print!("\n\r");
 			}
 
-			sleep(Duration::from_millis(20)).await;
-			while crossterm::event::poll(Duration::ZERO).unwrap() {
-				let Some(event) = events::from_crossterm(crossterm::event::read().unwrap()) else {
-					continue;
-				};
-				send.as_async().send(event).await.unwrap();
-			}
-			let cmds = game.tick();
 			if cmds.close {
 				break;
 			}
-		}
 
-		if let Some(display) = game.display() {
-			std::io::stdout()
-				.queue(crossterm::cursor::MoveTo(0, 0))
-				.unwrap()
-				.queue(crossterm::terminal::Clear(crossterm::terminal::ClearType::All))
-				.unwrap()
-				.flush()
-				.unwrap();
-			print!("{}", display);
-			print!("\n\r");
+			sleep(Duration::from_millis(20)).await;
 		}
 
 		game.close_save();

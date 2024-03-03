@@ -5,15 +5,15 @@ pub mod options;
 use std::fmt::Write;
 
 use terminity::{
-	events::{Event, EventPoller},
-	game::WidgetDisplayer,
+	events::Event,
+	game::GameContext,
 	img,
 	widgets::{
 		positionning::{
 			div::{Div1, Div2, Div3},
-			Position, Spacing,
+			Positionning, Spacing,
 		},
-		Widget,
+		AsWidget, Widget,
 	},
 	Size,
 };
@@ -100,34 +100,63 @@ struct TabContent {
 	active: Option<ActiveTab>,
 }
 
-struct TabContentWidget<'a, 'b, 'c>(&'a mut TabContent, &'b mut Size, &'c HubGames);
-
-impl TabContentWidget<'_, '_, '_> {
-	fn as_div(&self) -> Div2<TabSelect, &Self> {
-		let size = *self.1;
-		Div2::new(false, TabSelect::from_active(self.0.active, self.2), self)
-			.with_content_alignment(Position::Center)
-			.with_content_pos(Position::Start)
-		// .with_forced_size(size)
-	}
+enum TabContentAsWidget<'a> {
+	Library(library::DisplayWidget<'a>),
+	Install(&'a mut InstallTab),
+	Options(options::DisplayWidget<'a>),
+	Emtpy(Spacing),
 }
 
-impl Widget for &TabContentWidget<'_, '_, '_> {
+enum TabContentWidget<'a> {
+	Library(<library::DisplayWidget<'a> as AsWidget>::WidgetType<'a>),
+	Install(<InstallTab as AsWidget>::WidgetType<'a>),
+	// Options(<OptionsTab as AsWidget>::WidgetType<'a>),
+	Emtpy(Spacing),
+}
+
+impl AsWidget for TabContentAsWidget<'_> {
+	type WidgetType<'a> = TabContentWidget<'a>
+	where
+		Self: 'a;
+
+	fn as_widget(&mut self) -> Self::WidgetType<'_> {
+		todo!()
+	}
+}
+impl Widget for TabContentWidget<'_> {
 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
-		let size = self.size();
-		match &self.0.active {
-			None => Spacing::line(size.width).display_line(f, 0),
-			Some(ActiveTab::Library) => self.0.library.display_line(f, line, self.2),
-			Some(ActiveTab::Install) => self.0.install.display_line(f, line),
-			Some(ActiveTab::Options) => self.0.options.display_line(f, line, size),
+		match self {
+			TabContentWidget::Library(w) => w.display_line(f, line),
+			TabContentWidget::Install(w) => w.display_line(f, line),
+			TabContentWidget::Emtpy(s) => s.display_line(f, line),
 		}
 	}
 
 	fn size(&self) -> Size {
-		let mut res = *self.1;
-		res.height -= TabSelect::from_active(self.0.active, self.2).size().height;
-		res
+		match self {
+			TabContentWidget::Library(w) => w.size(),
+			TabContentWidget::Install(w) => w.size(),
+			TabContentWidget::Emtpy(s) => s.size(),
+		}
 	}
+}
+
+fn build_widget<'a>(
+	tab_content: &'a mut TabContent,
+	size: &'a mut Size,
+	games: &'a HubGames,
+) -> impl AsWidget + 'a {
+	let content = match tab_content.active {
+		Some(ActiveTab::Library) => {
+			TabContentAsWidget::Library(library::display(&mut tab_content.library, games))
+		}
+		Some(ActiveTab::Install) => TabContentAsWidget::Install(&mut tab_content.install),
+		Some(ActiveTab::Options) => TabContentAsWidget::Options(tab_content.options.display()),
+		None => TabContentAsWidget::Emtpy(Spacing::line(size.width)),
+	};
+	Div2::new(TabSelect::from_active(tab_content.active, games), content)
+		.with_content_alignment(Positionning::Center)
+		.with_content_pos(Positionning::Start)
 }
 
 #[derive(Debug)]
@@ -192,78 +221,113 @@ impl MainScreen {
 			tabs: TabContent {
 				library: LibraryTab::new(size),
 				install: InstallTab::new(size),
-				options: OptionsTab::new(),
+				options: OptionsTab::new(size),
 				active: None,
 			},
 		}
 	}
 
-	pub fn disp<D: WidgetDisplayer>(&mut self, displayer: D, games: &HubGames) {
-		if self.tick < 2 {
-			displayer.run(
-				&Div1::new(false, img!("Terminity"))
-					.with_content_alignment(Position::Center)
-					.with_content_pos(Position::Start)
-					.with_exact_size(self.size),
-			)
-		} else if self.tick < 3 {
-			displayer.run(
-				&Div1::new(false, img!("         ", "Terminity"))
-					.with_content_alignment(Position::Center)
-					.with_content_pos(Position::Start)
-					.with_exact_size(self.size),
-			)
-		} else if self.tick < 4 {
-			displayer.run(
-				&Div2::new(
-					false,
-					img!("         ", "Terminity"),
-					Spacing::line(self.size.width).with_char('─'),
-				)
-				.with_content_alignment(Position::Center)
-				.with_content_pos(Position::Start)
-				.with_exact_size(self.size),
-			)
-		} else if self.tick < 5 {
-			displayer.run(
-				&Div2::new(
-					false,
-					img!("         ", "Terminity", "         "),
-					Spacing::line(self.size.width).with_char('─'),
-				)
-				.with_content_alignment(Position::Center)
-				.with_content_pos(Position::Start)
-				.with_exact_size(self.size),
-			)
-		} else if self.tick < 14 {
-			displayer.run(
-				&Div3::new(
-					false,
-					img!("         ", "Terminity", "         "),
-					Spacing::line(self.size.width).with_char('─'),
-					TabSelect::from_active(self.tabs.active, games),
-				)
-				.with_content_alignment(Position::Center)
-				.with_content_pos(Position::Start),
-			)
-		} else {
-			displayer.run(
-				&Div3::new(
-					false,
-					img!("         ", "Terminity", "         "),
-					Spacing::line(self.size.width).with_char('─'),
-					TabContentWidget(&mut self.tabs, &mut self.size, games).as_div(),
-				)
-				.with_content_alignment(Position::Center)
-				.with_content_pos(Position::Start),
-			)
-		}
-	}
+	// pub fn disp<D: WidgetDisplayer>(&mut self, displayer: D, games: &HubGames) {
+	// 	if self.tick < 2 {
+	// 		game_ctx.display(
+	// 			&Div1::new(img!("Terminity"))
+	// 				.with_content_alignment(Positionning::Center)
+	// 				.with_content_pos(Positionning::Start)
+	// 				.with_exact_size(self.size),
+	// 		)
+	// 	} else if self.tick < 3 {
+	// 		game_ctx.display(
+	// 			&Div1::new(img!("         ", "Terminity"))
+	// 				.with_content_alignment(Positionning::Center)
+	// 				.with_content_pos(Positionning::Start)
+	// 				.with_exact_size(self.size),
+	// 		)
+	// 	} else if self.tick < 4 {
+	// 		game_ctx.display(
+	// 			&Div2::new(
+	// 				img!("         ", "Terminity"),
+	// 				Spacing::line(self.size.width).with_char('─'),
+	// 			)
+	// 			.with_content_alignment(Positionning::Center)
+	// 			.with_content_pos(Positionning::Start)
+	// 			.with_exact_size(self.size),
+	// 		)
+	// 	} else if self.tick < 5 {
+	// 		game_ctx.display(
+	// 			&Div2::new(
+	// 				img!("         ", "Terminity", "         "),
+	// 				Spacing::line(self.size.width).with_char('─'),
+	// 			)
+	// 			.with_content_alignment(Positionning::Center)
+	// 			.with_content_pos(Positionning::Start)
+	// 			.with_exact_size(self.size),
+	// 		)
+	// 	} else if self.tick < 14 {
+	// 		game_ctx.display(
+	// 			&Div3::new(
+	// 				img!("         ", "Terminity", "         "),
+	// 				Spacing::line(self.size.width).with_char('─'),
+	// 				TabSelect::from_active(self.tabs.active, games),
+	// 			)
+	// 			.with_content_alignment(Positionning::Center)
+	// 			.with_content_pos(Positionning::Start),
+	// 		)
+	// 	} else {
+	// 		game_ctx.display(
+	// 			&Div3::new(
+	// 				img!("         ", "Terminity", "         "),
+	// 				Spacing::line(self.size.width).with_char('─'),
+	// 				TabContentPreWidget(&mut self.tabs, &mut self.size, games).as_div(),
+	// 			)
+	// 			.with_content_alignment(Positionning::Center)
+	// 			.with_content_pos(Positionning::Start),
+	// 		)
+	// 	}
+	// }
 
-	pub async fn update<P: EventPoller>(&mut self, poller: P, ctx: &mut Context) {
+	pub async fn update<Ctx: GameContext>(&mut self, game_ctx: Ctx, ctx: &mut Context) {
 		self.tick += 1;
 		if self.tick < 5 {
-			for _ in poller.events() {}
+			for _ in game_ctx.events() {}
+			if self.tick < 2 {
+				game_ctx.display(
+					&Div1::new(img!("Terminity"))
+						.with_content_alignment(Positionning::Center)
+						.with_content_pos(Positionning::Start)
+						.with_exact_size(self.size)
+						.as_widget(),
+				)
+			} else if self.tick < 3 {
+				game_ctx.display(
+					&Div1::new(img!("         ", "Terminity"))
+						.with_content_alignment(Positionning::Center)
+						.with_content_pos(Positionning::Start)
+						.with_exact_size(self.size)
+						.as_widget(),
+				)
+			} else if self.tick < 4 {
+				game_ctx.display(
+					&Div2::new(
+						img!("         ", "Terminity"),
+						Spacing::line(self.size.width).with_char('─'),
+					)
+					.with_content_alignment(Positionning::Center)
+					.with_content_pos(Positionning::Start)
+					.with_exact_size(self.size)
+					.as_widget(),
+				)
+			} else if self.tick < 5 {
+				game_ctx.display(
+					&Div2::new(
+						img!("         ", "Terminity", "         "),
+						Spacing::line(self.size.width).with_char('─'),
+					)
+					.with_content_alignment(Positionning::Center)
+					.with_content_pos(Positionning::Start)
+					.with_exact_size(self.size)
+					.as_widget(),
+				)
+			}
 			return;
 		}
 
@@ -273,12 +337,23 @@ impl MainScreen {
 			if self.tick >= 11 {
 				self.tabs.active = Some(ActiveTab::Library);
 			}
-			for _ in poller.events() {}
+			for _ in game_ctx.events() {}
+
+			game_ctx.display(
+				&Div3::new(
+					img!("         ", "Terminity", "         "),
+					Spacing::line(self.size.width).with_char('─'),
+					TabSelect::from_active(self.tabs.active, &ctx.games),
+				)
+				.with_content_alignment(Positionning::Center)
+				.with_content_pos(Positionning::Start)
+				.as_widget(),
+			);
 			return;
 		};
 		let initial_active = *active_tab;
 
-		let poller = PollerMap::new(&poller, |e| {
+		let mapped_game_ctx = PollerMap::new(&game_ctx, |e| {
 			if let Event::KeyPress(kp) = &e {
 				match kp.code {
 					terminity::events::KeyCode::Tab => {
@@ -295,9 +370,12 @@ impl MainScreen {
 			Some(e)
 		});
 		match initial_active {
-			ActiveTab::Library => self.tabs.library.update(poller, ctx),
-			ActiveTab::Install => self.tabs.install.update(poller, ctx).await,
-			ActiveTab::Options => self.tabs.options.update(poller),
+			ActiveTab::Library => self.tabs.library.update(mapped_game_ctx, ctx),
+			ActiveTab::Install => self.tabs.install.update(mapped_game_ctx, ctx).await,
+			ActiveTab::Options => self.tabs.options.update(mapped_game_ctx),
 		}
+
+		let mut widget = build_widget(&mut self.tabs, &mut self.size, &ctx.games);
+		game_ctx.display(&widget.as_widget());
 	}
 }

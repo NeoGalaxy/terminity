@@ -150,7 +150,7 @@ impl<'a> WidgetLine<'a> {
 }
 
 impl Widget for WidgetLine<'_> {
-	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
+	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, _: u16) -> std::fmt::Result {
 		write!(f, "{}", &**self)
 	}
 

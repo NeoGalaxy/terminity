@@ -6,23 +6,24 @@ use std::{
 use rfd::FileHandle;
 use terminity::{
 	events::{Event, KeyCode, KeyPress},
+	game::GameContext,
 	img,
 	widgets::{
 		content::Img,
 		positionning::{
 			div::{CollDiv, Div4},
-			Position, Spacing,
+			Positionning, Spacing,
 		},
-		Widget,
+		AsWidget, Widget,
 	},
 	Size,
 };
 use tokio::{fs::File, io, sync::Mutex, task::JoinHandle};
 
-use crate::interface::{game_repository::GameDataLatest, load_game, Context, GameStatus};
+use crate::interface::{game_repository::GameDataLatest, Context, GameStatus};
 
 #[derive(Debug)]
-enum Status {
+pub enum Status {
 	Running(JoinHandle<Result<GameDataLatest, String>>),
 	Success(usize, usize, String),
 	Fail(usize, String),
@@ -49,6 +50,8 @@ impl Widget for Status {
 	}
 }
 
+type InstallTabContent = Div4<Spacing, Img<'static>, Img<'static>, CollDiv<Vec<Status>>>;
+
 #[derive(Debug)]
 pub struct InstallTab {
 	file_open: Arc<Mutex<()>>,
@@ -56,7 +59,7 @@ pub struct InstallTab {
 	// content: Div2<Img<'static>, TextArea>,
 	tick: usize,
 	popup: Option<JoinHandle<Vec<FileHandle>>>,
-	copying: Div4<Spacing, Img<'static>, Img<'static>, CollDiv<Vec<Status>, Status>>,
+	copying: InstallTabContent,
 }
 
 const TITLE1: Img = img![
@@ -66,15 +69,15 @@ const TITLE1: Img = img![
 ];
 const TITLE2: Img = img!["                ", ". Import list: .", r" -────────────- "];
 
-impl InstallTab {
-	pub fn display_line(
-		&self,
-		f: &mut std::fmt::Formatter<'_>,
-		line: u16,
-	) -> std::result::Result<(), std::fmt::Error> {
-		self.copying.display_line(f, line)
-	}
+impl AsWidget for InstallTab {
+	type WidgetType<'a> = <InstallTabContent as AsWidget>::WidgetType<'a>;
 
+	fn as_widget(&mut self) -> Self::WidgetType<'_> {
+		self.copying.as_widget()
+	}
+}
+
+impl InstallTab {
 	pub(crate) fn new(size: Size) -> Self {
 		let last_dir = if let Some(d) = directories::UserDirs::new() {
 			d.home_dir().to_owned()
@@ -84,30 +87,21 @@ impl InstallTab {
 		Self {
 			file_open: Mutex::new(()).into(),
 			last_dir,
-			// content: Div2::new(false, DIALOG, TextArea::center(wstr!("")))
-			// 	.with_content_alignment(Position::Center)
-			// 	.with_content_pos(Position::Center)
-			// 	.with_forced_size(size),
 			tick: 0,
 			popup: None,
 			copying: Div4::new(
-				false,
 				Spacing::line(1).with_char(' '),
 				TITLE1,
 				TITLE2,
-				CollDiv::new(false, vec![]),
+				CollDiv::new(vec![]),
 			)
-			.with_content_alignment(Position::Start)
-			.with_content_pos(Position::Start)
+			.with_content_alignment(Positionning::Start)
+			.with_content_pos(Positionning::Start)
 			.with_exact_size(size),
 		}
 	}
 
-	pub(crate) async fn update<P: terminity::events::EventPoller>(
-		&mut self,
-		poller: P,
-		ctx: &mut Context,
-	) {
+	pub(crate) async fn update<P: GameContext>(&mut self, poller: P, ctx: &mut Context) {
 		self.tick += 1;
 
 		if let Some(p) = &mut self.popup {
@@ -159,7 +153,8 @@ impl InstallTab {
 						};
 
 						self.copying
-							.widget3_mut()
+							.widgets
+							.3
 							.collection_mut()
 							.push(Status::Running(tokio::spawn(f)));
 					}
@@ -167,9 +162,9 @@ impl InstallTab {
 			}
 		}
 
-		for i in (0..self.copying.widget3().len()).rev() {
-			let copying = &mut self.copying.widget3_mut();
-			let mut copying = copying.collection_mut();
+		for i in (0..self.copying.widgets.3.len()).rev() {
+			let copying = &mut self.copying.widgets.3;
+			let copying = copying.collection_mut();
 			let game = &mut copying[i];
 			match game {
 				Status::Running(h) => {
