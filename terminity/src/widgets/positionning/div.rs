@@ -148,9 +148,9 @@ macro_rules! div {
 						};
 						let w_padding = size.width - tot_width;
 						let (left_pad, right_pad) = match self.content_pos {
-							Positionning::Start => (w_padding, 0),
+							Positionning::Start => (0, w_padding),
 							Positionning::Center => (w_padding / 2, w_padding - w_padding / 2),
-							Positionning::End => (0, w_padding),
+							Positionning::End => (w_padding, 0),
 						};
 
 						let lines_data = vec![$(
@@ -158,9 +158,9 @@ macro_rules! div {
 								let w = &widgets.$windex;
 								let padding = size.height - w.size().height;
 								let (top_pad, bot_pad) = match self.content_alignment {
-									Positionning::Start => (padding, 0),
+									Positionning::Start => (0, padding),
 									Positionning::Center => (padding / 2, padding - padding / 2),
-									Positionning::End => (0, padding),
+									Positionning::End => (padding, 0),
 								};
 								($windex, (top_pad, bot_pad), None)
 							},
@@ -187,9 +187,9 @@ macro_rules! div {
 						};
 						let h_padding = size.height - tot_height;
 						let (top_pad, bot_pad) = match self.content_pos {
-							Positionning::Start => (h_padding, 0),
+							Positionning::Start => (0, h_padding),
 							Positionning::Center => (h_padding / 2, h_padding - h_padding / 2),
-							Positionning::End => (0, h_padding),
+							Positionning::End => (h_padding, 0),
 						};
 
 
@@ -199,9 +199,9 @@ macro_rules! div {
 								widgets.$windex.size().height
 						)),*].into_iter().flat_map(|(i, padding, widget_height)| {
 							let (left_pad, right_pad) = match self.content_alignment {
-								Positionning::Start => (padding, 0),
+								Positionning::Start => (0, padding),
 								Positionning::Center => (padding / 2, padding - padding / 2),
-								Positionning::End => (0, padding),
+								Positionning::End => (padding, 0),
 							};
 							(0..widget_height).map(move |l| (i, (left_pad, right_pad), Some(l)))
 						}).collect();
@@ -238,14 +238,14 @@ macro_rules! div {
 				if self.horizontal {
 					Spacing::line(self.start_padding).display_line(f, line)?;
 					for (i, (top_pad, bot_pad), _) in &self.lines_data {
-						if line < *top_pad || line > self.size.height - bot_pad {
+						if line < *top_pad || line >= self.size.height - bot_pad {
 							Spacing::line(self.widget_size(*i).width).display_line(f, line)?;
 						} else {
 							self.widget_display_line(*i, f, line - top_pad)?;
 						}
 					}
 					Spacing::line(self.end_padding).display_line(f, line)?;
-				} else if line < self.start_padding || line > self.size.height - self.end_padding {
+				} else if line < self.start_padding || line >= self.size.height - self.end_padding {
 					Spacing::line(self.size.width).display_line(f, line)?;
 				} else {
 					let (i, (left_pad, right_pad), Some(w_line)) =
@@ -555,9 +555,9 @@ where
 			};
 			let w_padding = size.width - tot_width;
 			let (left_pad, right_pad) = match self.content_pos {
-				Positionning::Start => (w_padding, 0),
+				Positionning::Start => (0, w_padding),
 				Positionning::Center => (w_padding / 2, w_padding - w_padding / 2),
-				Positionning::End => (0, w_padding),
+				Positionning::End => (w_padding, 0),
 			};
 
 			let (lines_data, widget_list) = widgets
@@ -566,9 +566,9 @@ where
 				.map(|(i, (k, w))| {
 					let padding = size.height - w.size().height;
 					let (top_pad, bot_pad) = match self.content_alignment {
-						Positionning::Start => (padding, 0),
+						Positionning::Start => (0, padding),
 						Positionning::Center => (padding / 2, padding - padding / 2),
-						Positionning::End => (0, padding),
+						Positionning::End => (padding, 0),
 					};
 					((i, (top_pad, bot_pad), None), (k, w))
 				})
@@ -597,9 +597,9 @@ where
 			};
 			let h_padding = size.height - tot_height;
 			let (top_pad, bot_pad) = match self.content_pos {
-				Positionning::Start => (h_padding, 0),
+				Positionning::Start => (0, h_padding),
 				Positionning::Center => (h_padding / 2, h_padding - h_padding / 2),
-				Positionning::End => (0, h_padding),
+				Positionning::End => (h_padding, 0),
 			};
 
 			let mut widget_list = vec![];
@@ -610,9 +610,9 @@ where
 					let i = widget_list.len();
 					let padding = size.width - w.size().width;
 					let (left_pad, right_pad) = match self.content_alignment {
-						Positionning::Start => (padding, 0),
+						Positionning::Start => (0, padding),
 						Positionning::Center => (padding / 2, padding - padding / 2),
-						Positionning::End => (0, padding),
+						Positionning::End => (padding, 0),
 					};
 					let widget_height = w.size().height;
 					widget_list.push((k, w));
@@ -647,14 +647,14 @@ impl<K, W: Widget> Widget for CollDivWidget<K, W> {
 			Spacing::line(self.start_padding).display_line(f, line)?;
 			for (i, (top_pad, bot_pad), _) in &self.lines_data {
 				let w = &self.widgets[*i].1;
-				if line < *top_pad || line > self.size.height - bot_pad {
+				if line < *top_pad || line >= self.size.height - bot_pad {
 					Spacing::line(w.size().width).display_line(f, line)?;
 				} else {
 					w.display_line(f, line - top_pad)?;
 				}
 			}
 			Spacing::line(self.end_padding).display_line(f, line)?;
-		} else if line < self.start_padding || line > self.size.height - self.end_padding {
+		} else if line < self.start_padding || line >= self.size.height - self.end_padding {
 			Spacing::line(self.size.width).display_line(f, line)?;
 		} else {
 			let (i, (left_pad, right_pad), Some(w_line)) =

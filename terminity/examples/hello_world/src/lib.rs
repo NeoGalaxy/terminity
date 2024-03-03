@@ -1,15 +1,14 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
 use terminity::events::Event;
-use terminity::game::WidgetDisplayer;
 use terminity::widget_string::WidgetString;
 use terminity::widgets::content::TextArea;
 
+use terminity::game::{Game, GameContext};
 use terminity::widgets::positionning::div::Div2;
 use terminity::widgets::positionning::{Clip, Positionning};
-use terminity::widgets::Widget;
+use terminity::widgets::{AsWidget, Widget};
 use terminity::{build_game, img, Size};
-use terminity::{events::GameContext, game::Game};
 
 struct DebugAsDisplay<T: Debug>(T);
 
@@ -27,7 +26,9 @@ impl Game for HelloWorld {
 		HelloWorld { events: VecDeque::with_capacity(40), frame: 0, size }
 	}
 
-	fn disp<D: WidgetDisplayer>(&mut self, displayer: D) {
+	fn update<E: GameContext>(&mut self, events: E) {
+		self.events.extend(events.events().map(|v| (v, 0)));
+
 		self.frame += 1;
 		let mut n = 0;
 		while self.events.front().map_or(false, |v| v.1 > 50) {
@@ -73,14 +74,11 @@ impl Game for HelloWorld {
 			buffer.newline().push_in_line(format!("{:?}", event).as_str().try_into().unwrap());
 		}
 
-		displayer.run(
-			&Div2::new(false, top, TextArea::left(buffer).with_size(text_size))
-				.with_exact_size(self.size),
+		events.display(
+			&Div2::new(top, TextArea::left(buffer).with_size(text_size))
+				.with_exact_size(self.size)
+				.as_widget(),
 		);
-	}
-
-	fn update<E: GameContext>(&mut self, events: E) {
-		self.events.extend(events.events().map(|v| (v, 0)));
 	}
 
 	fn finish(self) -> Option<Self::DataOutput> {
@@ -92,6 +90,42 @@ struct HelloWorld {
 	frame: usize,
 	events: VecDeque<(Event, usize)>,
 	size: Size,
+}
+
+#[derive(terminity::WidgetDisplay)]
+pub struct GameDisplay(pub build_game::WidgetBuffer);
+
+impl Widget for GameDisplay {
+	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
+		if self.0.is_empty() {
+			return Ok(());
+		}
+		let bounds_index = line as usize * std::mem::size_of::<u16>();
+		let bounds = unsafe {
+			(
+				u16::from_le_bytes([
+					*self.0.content.add(bounds_index),
+					*self.0.content.add(bounds_index + 1),
+				]),
+				u16::from_le_bytes([
+					*self.0.content.add(bounds_index + 2),
+					*self.0.content.add(bounds_index + 3),
+				]),
+			)
+		};
+		let content = unsafe {
+			std::slice::from_raw_parts(
+				self.0.content.add(bounds.0 as usize),
+				(bounds.1 - bounds.0) as usize,
+			)
+		};
+		let s = unsafe { std::str::from_utf8_unchecked(content) };
+		write!(f, "{s}")
+	}
+
+	fn size(&self) -> terminity::Size {
+		Size { width: self.0.width as u16, height: self.0.height as u16 }
+	}
 }
 
 build_game!(HelloWorld);

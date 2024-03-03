@@ -5,10 +5,9 @@ use std::time::{Duration, Instant};
 use board::Board;
 
 use terminity::events::{Event, KeyCode, KeyPress, MouseButton, MouseKind};
-use terminity::game::WidgetDisplayer;
+use terminity::game::{Game, GameContext};
 use terminity::widgets::EventBubbling;
 use terminity::{build_game, Size};
-use terminity::{events::GameContext, game::Game};
 
 impl Game for Chess {
 	type DataInput = ();
@@ -16,10 +15,6 @@ impl Game for Chess {
 
 	fn start(_data: Option<Self::DataInput>, _size: Size) -> Self {
 		Self { last_blink: Instant::now(), board: Board::default() }
-	}
-
-	fn disp<D: WidgetDisplayer>(&mut self, displayer: D) {
-		displayer.run(&self.board)
 	}
 
 	fn update<E: GameContext>(&mut self, poller: E) {
@@ -79,6 +74,8 @@ impl Game for Chess {
 			self.last_blink = Instant::now();
 			self.board.cursor_style_alt = !self.board.cursor_style_alt;
 		}
+
+		poller.display(&self.board)
 	}
 
 	fn finish(self) -> Option<Self::DataOutput> {

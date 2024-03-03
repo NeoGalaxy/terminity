@@ -4,7 +4,7 @@ use libloading::{Library, Symbol};
 use std::{convert::AsRef, ffi::OsStr, io::Write as _, mem::size_of, ptr::null_mut, slice};
 use terminity::{
 	build_game::{TerminityCommandsData, UpdateResults, WidgetBuffer},
-	events::{CommandEvent, Event, KeyCode, KeyModifiers, KeyPress},
+	events::{CommandEvent, Event},
 	game::GameData,
 	widgets::Widget,
 	Size, WidgetDisplay,
@@ -40,7 +40,8 @@ impl Widget for GameDisplay {
 				(bounds.1 - bounds.0) as usize,
 			)
 		};
-		let s = unsafe { std::str::from_utf8_unchecked(content) };
+		let s = std::string::String::from_utf8_lossy(content);
+		// let s = unsafe { std::str::from_utf8_unchecked(content) };
 		write!(f, "{s}")
 	}
 
@@ -150,11 +151,13 @@ impl<'a> GameHandle<'a> {
 		event_canal: kanal::Receiver<Event>,
 		init_size: Size,
 	) -> Self {
-		binding.start_game(GameData { content: null_mut(), size: 0, capacity: 0 }, init_size);
+		binding.start_game(
+			GameData { content: null_mut(), size: 0, capacity: 0 },
+			init_size - Size { width: 0, height: 4 },
+		);
 		Self { binding, event_buffer: Vec::with_capacity(128), event_canal }
 	}
 
-	#[must_use]
 	pub fn tick(&mut self) -> (GameCommands, Option<GameDisplay>) {
 		self.event_buffer.clear();
 		while let Ok(Some(evt)) = self.event_canal.try_recv() {

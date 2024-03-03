@@ -431,7 +431,7 @@ impl EventBubbling for Board {
 			column -= 1;
 			row = 7 - row;
 		}
-		let new_pos = Pos { x: column, y: row };
+		let new_pos = Pos { x: column as u16, y: row as u16 };
 		callback(Some((new_pos, self[new_pos])), event.bubble_at(Position { line: row, column }))
 	}
 }

@@ -107,27 +107,33 @@ enum TabContentAsWidget<'a> {
 	Emtpy(Spacing),
 }
 
-enum TabContentWidget<'a> {
-	Library(<library::DisplayWidget<'a> as AsWidget>::WidgetType<'a>),
-	Install(<InstallTab as AsWidget>::WidgetType<'a>),
-	// Options(<OptionsTab as AsWidget>::WidgetType<'a>),
+enum TabContentWidget<'a: 'b, 'b> {
+	Library(<library::DisplayWidget<'a> as AsWidget>::WidgetType<'b>),
+	Install(<InstallTab as AsWidget>::WidgetType<'b>),
+	Options(<options::DisplayWidget<'a> as AsWidget>::WidgetType<'b>),
 	Emtpy(Spacing),
 }
 
-impl AsWidget for TabContentAsWidget<'_> {
-	type WidgetType<'a> = TabContentWidget<'a>
+impl<'w> AsWidget for TabContentAsWidget<'w> {
+	type WidgetType<'a> = TabContentWidget<'w, 'a>
 	where
 		Self: 'a;
 
 	fn as_widget(&mut self) -> Self::WidgetType<'_> {
-		todo!()
+		match self {
+			TabContentAsWidget::Library(w) => TabContentWidget::Library(w.as_widget()),
+			TabContentAsWidget::Install(w) => TabContentWidget::Install(w.as_widget()),
+			TabContentAsWidget::Options(w) => TabContentWidget::Options(w.as_widget()),
+			TabContentAsWidget::Emtpy(w) => TabContentWidget::Emtpy(*w.as_widget()),
+		}
 	}
 }
-impl Widget for TabContentWidget<'_> {
+impl Widget for TabContentWidget<'_, '_> {
 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
 		match self {
 			TabContentWidget::Library(w) => w.display_line(f, line),
 			TabContentWidget::Install(w) => w.display_line(f, line),
+			TabContentWidget::Options(w) => w.display_line(f, line),
 			TabContentWidget::Emtpy(s) => s.display_line(f, line),
 		}
 	}
@@ -136,6 +142,7 @@ impl Widget for TabContentWidget<'_> {
 		match self {
 			TabContentWidget::Library(w) => w.size(),
 			TabContentWidget::Install(w) => w.size(),
+			TabContentWidget::Options(w) => w.size(),
 			TabContentWidget::Emtpy(s) => s.size(),
 		}
 	}
@@ -143,7 +150,7 @@ impl Widget for TabContentWidget<'_> {
 
 fn build_widget<'a>(
 	tab_content: &'a mut TabContent,
-	size: &'a mut Size,
+	size: Size,
 	games: &'a HubGames,
 ) -> impl AsWidget + 'a {
 	let content = match tab_content.active {
@@ -214,7 +221,7 @@ pub struct MainScreen {
 
 impl MainScreen {
 	pub fn new(mut size: Size) -> Self {
-		size.height -= 5; // Remove space taken by img and spacing
+		size.height -= 8; // Remove space taken by img, spacing and tab selection
 		MainScreen {
 			tick: 0,
 			size,
@@ -375,7 +382,15 @@ impl MainScreen {
 			ActiveTab::Options => self.tabs.options.update(mapped_game_ctx),
 		}
 
-		let mut widget = build_widget(&mut self.tabs, &mut self.size, &ctx.games);
-		game_ctx.display(&widget.as_widget());
+		game_ctx.display(
+			&Div3::new(
+				img!("         ", "Terminity", "         "),
+				Spacing::line(self.size.width).with_char('─'),
+				build_widget(&mut self.tabs, self.size, &ctx.games),
+			)
+			.with_content_alignment(Positionning::Center)
+			.with_content_pos(Positionning::Start)
+			.as_widget(),
+		);
 	}
 }

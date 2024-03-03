@@ -1,5 +1,9 @@
 use std::sync::Arc;
-use terminity::{game::GameContext, widgets::AsWidget, wstr, Size};
+use terminity::{
+	game::GameContext,
+	widgets::{AsWidget, Widget},
+	wstr, Size,
+};
 
 use crate::game_handling::{GameCommands, GameHandle, GameLib};
 use ouroboros::self_referencing;
@@ -41,14 +45,15 @@ impl GameScreen {
 		if let Some(display) = res.1 {
 			let mut clip_size = size;
 			clip_size.height -= 2;
+			let disp_size = display.size();
 			ctx.display(
 				&Div3::new(
 					img!("Running Game"),
 					Spacing::line(size.width).with_char('-'),
 					Clip {
 						widget: display,
-						size: clip_size,
-						v_pos: Positionning::Center,
+						size: clip_size - Size { width: 0, height: 3 },
+						v_pos: Positionning::Start,
 						h_pos: Positionning::Center,
 					},
 				)
@@ -56,7 +61,10 @@ impl GameScreen {
 				.with_content_pos(Positionning::Start)
 				.with_exact_size(size)
 				.as_widget(),
-			)
+			);
+			print!("Size: {:?}", disp_size);
+			print!("------------------");
+			print!("\n\r");
 		}
 		res.0
 	}
