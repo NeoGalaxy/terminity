@@ -21,6 +21,7 @@ pub struct Clip<W: AsWidget> {
 	pub h_pos: Positionning,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct ClipWidget<W: Widget> {
 	widget: W,
 	size: Size,
@@ -98,8 +99,10 @@ impl<W: EventBubbling + Widget> EventBubbling for ClipWidget<W> {
 		event: super::BubblingEvent,
 		callback: F,
 	) -> R {
-		if (self.top_padding..self.size.height as i16).contains(&event.pos().line)
-			&& (self.left_padding..self.size.height as i16).contains(&event.pos().column)
+		let w_size = self.widget.size();
+		if (self.top_padding..self.top_padding + w_size.height as i16).contains(&event.pos().line)
+			&& (self.left_padding..self.left_padding + w_size.width as i16)
+				.contains(&event.pos().column)
 		{
 			self.widget.bubble_event(
 				event.bubble_at(Position { line: self.top_padding, column: self.left_padding }),

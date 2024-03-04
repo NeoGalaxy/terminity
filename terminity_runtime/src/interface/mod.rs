@@ -248,8 +248,7 @@ impl Hub {
 
 	pub async fn update<E: GameContext>(&mut self, poller: E) {
 		if let Ok(game) = self.ctx.run_game.1.try_recv() {
-			self.screen.current =
-				HubScreen::Game(GameScreen::open(game, self.size - Size { width: 2, height: 4 }))
+			self.screen.current = HubScreen::Game(GameScreen::open(game, self.size))
 		}
 
 		while let Ok(game) = self.ctx.add_game.1.try_recv() {
@@ -305,7 +304,7 @@ impl Hub {
 				self.screen.main.update(poller, &mut self.ctx).await;
 			}
 			HubScreen::Game(g) => {
-				let GameCommands { close } = g.update(poller, self.size);
+				let GameCommands { close } = g.update(poller);
 				exit_game = exit_game || close;
 
 				if exit_game {

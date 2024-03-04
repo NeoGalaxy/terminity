@@ -164,7 +164,7 @@ impl EventBubbling for TextArea {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, EventBubbling)]
 pub struct Img<'a> {
 	pub content: WidgetStr<'a>,
 	size: Size,

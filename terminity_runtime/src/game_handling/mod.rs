@@ -1,20 +1,21 @@
-use crate::events;
-use crossterm::QueueableCommand as _;
 use libloading::{Library, Symbol};
-use std::{convert::AsRef, ffi::OsStr, io::Write as _, mem::size_of, ptr::null_mut, slice};
+use std::{convert::AsRef, ffi::OsStr, fmt::Debug, mem::size_of, ptr::null_mut, slice};
 use terminity::{
 	build_game::{TerminityCommandsData, UpdateResults, WidgetBuffer},
 	events::{CommandEvent, Event},
 	game::GameData,
-	widgets::Widget,
+	widgets::{EventBubbling, Widget},
 	Size, WidgetDisplay,
 };
 
-use tokio::time::sleep;
-use tokio::time::Duration;
-
-#[derive(WidgetDisplay)]
+#[derive(WidgetDisplay, EventBubbling)]
 pub struct GameDisplay(pub WidgetBuffer);
+
+impl Debug for GameDisplay {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "<GameDisplay>")
+	}
+}
 
 impl Widget for GameDisplay {
 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
@@ -151,10 +152,7 @@ impl<'a> GameHandle<'a> {
 		event_canal: kanal::Receiver<Event>,
 		init_size: Size,
 	) -> Self {
-		binding.start_game(
-			GameData { content: null_mut(), size: 0, capacity: 0 },
-			init_size - Size { width: 0, height: 4 },
-		);
+		binding.start_game(GameData { content: null_mut(), size: 0, capacity: 0 }, init_size);
 		Self { binding, event_buffer: Vec::with_capacity(128), event_canal }
 	}
 
@@ -193,7 +191,7 @@ impl<'a> GameHandle<'a> {
 	}
 }
 
-struct GameTask {
+/*struct GameTask {
 	handle: tokio::task::JoinHandle<()>,
 }
 
@@ -232,4 +230,4 @@ fn run_game_task(game: GameLib, init_size: Size) -> GameTask {
 		game.close_save();
 	});
 	GameTask { handle }
-}
+}*/

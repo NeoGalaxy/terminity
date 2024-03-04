@@ -15,6 +15,7 @@ use std::fmt::Formatter;
 use std::fmt::Write;
 use std::iter::Enumerate;
 use std::ops::Deref;
+use std::ops::DerefMut;
 use std::ops::RangeBounds;
 use std::slice;
 
@@ -238,6 +239,18 @@ pub trait EventBubbling {
 }
 pub use terminity_proc::EventBubbling;
 
+impl<T: EventBubbling> EventBubbling for &mut T {
+	type FinalData<'a> = T::FinalData<'a> where Self: 'a;
+
+	fn bubble_event<'a, R, F: FnOnce(Self::FinalData<'a>, BubblingEvent) -> R>(
+		&'a mut self,
+		event: BubblingEvent,
+		callback: F,
+	) -> R {
+		self.deref_mut().bubble_event(event, callback)
+	}
+}
+
 pub struct BubblingEvent {
 	pub event: events::Mouse,
 	pub current_widget_pos: Position,
@@ -246,6 +259,14 @@ pub struct BubblingEvent {
 impl From<events::Mouse> for BubblingEvent {
 	fn from(value: events::Mouse) -> Self {
 		Self { event: value, current_widget_pos: Position { line: 0, column: 0 } }
+	}
+}
+
+impl From<BubblingEvent> for events::Mouse {
+	fn from(value: BubblingEvent) -> Self {
+		let mut event = value.event;
+		event.position -= value.current_widget_pos;
+		event
 	}
 }
 

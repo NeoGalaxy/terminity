@@ -272,7 +272,7 @@ macro_rules! div {
 		});
 
 		impl<$($wty: Widget + EventBubbling),*> EventBubbling for DivWidget<$($wty),*> {
-			type FinalData<'a> = Option<DivWidgetElement<$($wty::FinalData<'a>),*>> where Self: 'a;
+			type FinalData<'a> = Result<DivWidgetElement<$($wty::FinalData<'a>),*>, &'a mut Self> where Self: 'a;
 
 			fn bubble_event<'a, R, F: FnOnce(Self::FinalData<'a>, crate::widgets::BubblingEvent) -> R>(
 				&'a mut self,
@@ -283,7 +283,7 @@ macro_rules! div {
 					if !(self.start_padding as i16..(self.size.width - self.end_padding) as i16)
 						.contains(&(event.pos().column))
 					{
-						return callback(None, event);
+						return callback(Err(self), event);
 					}
 					let x_pos = self.start_padding;
 					for (i, (t_padd, l_padd), _) in &self.lines_data {
@@ -295,22 +295,22 @@ macro_rules! div {
 									$($windex => {
 										return self.widgets.$windex.bubble_event(
 											event.bubble_at(Position { line: *t_padd as i16, column: x_pos as i16 }),
-											|a, evt| callback(Some(DivWidgetElement::$wty(a)), evt),
+											|a, evt| callback(Ok(DivWidgetElement::$wty(a)), evt),
 										);
 									})*
 									_ => panic!("No widget of index {i}"),
 								}
 							} else {
-								return callback(None, event);
+								return callback(Err(self), event);
 							}
 						}
 					}
-					callback(None, event)
+					callback(Err(self), event)
 				} else {
-					if !(self.start_padding as i16..(self.size.width - self.end_padding) as i16)
+					if !(self.start_padding as i16..(self.size.height - self.end_padding) as i16)
 						.contains(&(event.pos().line))
 					{
-						return callback(None, event);
+						return callback(Err(self), event);
 					}
 					let (i, padding, Some(widget_line)) =
 						&self.lines_data[event.pos().line as usize - self.start_padding as usize]
@@ -321,8 +321,6 @@ macro_rules! div {
 					if (padding.0 as i16..(self.size.width - padding.1) as i16)
 						.contains(&event.pos().column)
 					{
-						callback(None, event)
-					} else {
 						match i {
 							$($windex => {
 								let bubble_pos = Position {
@@ -330,12 +328,13 @@ macro_rules! div {
 									column: padding.0 as i16,
 								};
 								self.widgets.$windex.bubble_event(
-									event.bubble_at(bubble_pos), |a, evt| callback(Some(DivWidgetElement::$wty(a)), evt)
+									event.bubble_at(bubble_pos), |a, evt| callback(Ok(DivWidgetElement::$wty(a)), evt)
 								)
 							})*
 							_ => panic!("No widget of index {i}"),
 						}
-
+					} else {
+						callback(Err(self), event)
 					}
 				}
 			}

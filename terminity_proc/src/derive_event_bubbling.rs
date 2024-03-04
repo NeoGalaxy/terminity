@@ -12,9 +12,9 @@ pub fn run(input: DeriveInput) -> (TokenStream, Vec<Diagnostic>) {
 	let expanded = quote! {
 		impl #impl_generics terminity::widgets::EventBubbling for #name #ty_generics #where_clause {
 
-			type FinalData<'a> = &'a mut Self;
-			fn bubble_event<'a, R, F: FnOnce(Self::FinalData<'a>, terminity::widgets::BubblingEvent) -> R>(
-				&'a mut self,
+			type FinalData<'__local_lifetime> = &'__local_lifetime mut Self where Self: '__local_lifetime;
+			fn bubble_event<'__local_lifetime, R, F: FnOnce(Self::FinalData<'__local_lifetime>, terminity::widgets::BubblingEvent) -> R>(
+				&'__local_lifetime mut self,
 				event: terminity::widgets::BubblingEvent,
 				callback: F,
 			) -> R {
