@@ -18,7 +18,7 @@ pub struct GameDisplay(pub WidgetBuffer);
 
 impl Widget for GameDisplay {
 	fn display_line(&self, f: &mut std::fmt::Formatter<'_>, line: u16) -> std::fmt::Result {
-		if self.0.is_empty() {
+		if line as u32 >= self.0.height {
 			return Ok(());
 		}
 		let bounds_index = line as usize * size_of::<u16>();
@@ -40,7 +40,7 @@ impl Widget for GameDisplay {
 				(bounds.1 - bounds.0) as usize,
 			)
 		};
-		let s = std::string::String::from_utf8_lossy(content);
+		let s = unsafe { std::str::from_utf8_unchecked(content) };
 		// let s = unsafe { std::str::from_utf8_unchecked(content) };
 		write!(f, "{s}")
 	}

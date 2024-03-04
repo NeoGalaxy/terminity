@@ -69,7 +69,7 @@ impl<W: Widget> Widget for ClipWidget<W> {
 		}
 		line = (line as i16 - self.top_padding).try_into().unwrap();
 
-		if line >= self.size.height {
+		if line >= self.widget.size().height {
 			return Spacing::line(self.size().width).display_line(f, 0);
 		}
 

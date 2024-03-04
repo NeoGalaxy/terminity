@@ -88,15 +88,15 @@ impl AsWidget for TextArea {
 			{
 				let mut remaining_width = line_info.width;
 				let mut next_pos = 0;
-				let mut chars = line_content.char_indices().peekable();
+				let mut chars = line_content.char_indices();
 
 				while remaining_width > size.width {
 					lines.push(LineInfo { pos: line_info.pos + next_pos, width: size.width });
 					let mut w = 0;
-					while let Some((pos, c)) = chars.peek() {
+					for (pos, c) in chars.by_ref() {
 						let char_width = c.width().unwrap() as u16;
 						if w + char_width > size.width {
-							next_pos = *pos as u16;
+							next_pos = pos as u16;
 							break;
 						} else {
 							w += char_width;

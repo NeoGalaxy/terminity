@@ -52,8 +52,8 @@ impl GameScreen {
 					Spacing::line(size.width).with_char('-'),
 					Clip {
 						widget: display,
-						size: clip_size - Size { width: 0, height: 3 },
-						v_pos: Positionning::Start,
+						size: size - Size { width: 0, height: 2 },
+						v_pos: Positionning::Center,
 						h_pos: Positionning::Center,
 					},
 				)
@@ -62,9 +62,6 @@ impl GameScreen {
 				.with_exact_size(size)
 				.as_widget(),
 			);
-			print!("Size: {:?}", disp_size);
-			print!("------------------");
-			print!("\n\r");
 		}
 		res.0
 	}
